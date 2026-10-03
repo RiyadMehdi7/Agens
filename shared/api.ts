@@ -32,6 +32,6 @@ export const importResponseSchema = z.object({ dataset: datasetSchema }).strict(
 export const queryResponseSchema = z.object({ result: queryResultSchema }).strict();
 export const healthResponseSchema = z.object({
   status: z.literal('ok'), stage: z.literal('integration-skeleton'),
-  availability: z.object({ data: z.enum(['unavailable', 'adapter-injected', 'ready']), voice: z.literal('unavailable'), planner: z.literal('unavailable') }).strict(),
-  voiceImplemented: z.literal(false), dataConnectorsImplemented: z.boolean(),
+  availability: z.object({ data: z.enum(['unavailable', 'adapter-injected', 'ready']), voice: z.enum(['unavailable', 'configured']), planner: z.enum(['unavailable', 'configured']) }).strict(),
+  voiceImplemented: z.boolean(), dataConnectorsImplemented: z.boolean(),
 }).strict();

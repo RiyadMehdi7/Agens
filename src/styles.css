@@ -167,6 +167,17 @@ td.num, th.num { text-align: right; font-family: var(--mono); color: var(--text)
 .mic { position: relative; width: 76px; height: 76px; border-radius: 50%; border: 1px solid #262931; background: #121318; color: var(--text);
   display: flex; align-items: center; justify-content: center; padding: 0; animation: breathe 3.6s ease-in-out infinite; }
 .mic[aria-disabled='true'] { color: var(--muted); }
+.mic-wrap { position: relative; --level: 0; }
+.mic-wrap .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--accent); pointer-events: none; animation: ring 1.9s ease-out infinite; }
+.mic-wrap .ring.r2 { animation-delay: .63s; }
+.mic-wrap .ring.r3 { animation-delay: 1.26s; }
+.mic-wrap.listening .mic, .mic-wrap.speaking .mic { background: var(--accent); color: var(--ground); border-color: var(--accent); animation: none;
+  transform: scale(calc(1 + var(--level) * .18)); transition: transform .08s linear, box-shadow .3s;
+  box-shadow: 0 0 calc(40px + var(--level) * 60px) calc(4px + var(--level) * 10px) rgba(255, 138, 76, .45); }
+.mic-wrap.speaking .mic { animation: talk 1.1s ease-in-out infinite; box-shadow: 0 0 70px 8px rgba(255, 138, 76, .5); }
+.mic-wrap.denied .mic, .mic-wrap.error .mic { border-color: rgba(255, 143, 143, .5); color: var(--danger); animation: none; }
+.status.caption { max-width: 640px; color: var(--muted); animation: fadeIn .2s ease-out both; }
+.status.caption.agent { color: var(--text); }
 .spin-ring { position: absolute; inset: -7px; border-radius: 50%; border: 1.5px solid transparent; border-top-color: var(--accent); border-left-color: #5b8cff;
   animation: spin 1.4s linear infinite; pointer-events: none; }
 
@@ -277,6 +288,8 @@ td.num, th.num { text-align: right; font-family: var(--mono); color: var(--text)
 @keyframes reveal { 0% { filter: blur(18px) saturate(1.5); opacity: .6; transform: scale(1.04); } 100% { filter: blur(0) saturate(1); opacity: 1; transform: none; } }
 @keyframes drift { 0%, 100% { transform: translate(-20%, -10%) scale(1); } 50% { transform: translate(25%, 15%) scale(1.3); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes ring { 0% { transform: scale(1); opacity: .5; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes talk { 0%, 100% { transform: scale(1); } 20% { transform: scale(1.09); } 35% { transform: scale(1.02); } 55% { transform: scale(1.12); } 75% { transform: scale(1.04); } }
 @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
 
 @media (max-width: 760px) {

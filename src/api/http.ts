@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { datasetListResponseSchema, errorResponseSchema, importInspectionResponseSchema, importResponseSchema, queryResponseSchema,
-  type ConnectSourceRequest, type ImportRequest } from '../../shared/api.js';
+  type ConnectSourceRequest, type ImportRequest, type planRequestSchema } from '../../shared/api.js';
 import type { Dataset, QueryResult } from '../../shared/data.js';
+import { liveTokenResponseSchema, planResponseSchema, type LiveTokenResponse, type PlanResponse } from '../../shared/voice.js';
 import { ApiFailure } from './errors.js';
 import type { AgensApi, QueryInput } from './types.js';
 
@@ -12,6 +13,8 @@ export function onSessionReset(listener: Listener): () => void {
   resetListeners.add(listener);
   return () => { resetListeners.delete(listener); };
 }
+
+const modelPaths = new Set(['/api/live/token', '/api/dashboard/plan']);
 
 async function call<T>(path: string, schema: z.ZodType<T>, body?: unknown, retried = false): Promise<T> {
   let response: Response;
@@ -35,12 +38,16 @@ async function call<T>(path: string, schema: z.ZodType<T>, body?: unknown, retri
       resetListeners.forEach(listener => listener());
       return call(path, schema, body, true);
     }
-    throw new ApiFailure(code, undefined, response.status);
+    // Model endpoints return purpose-written, user-safe messages (quota, model unavailable); keep them.
+    const own = parsed.success && modelPaths.has(path) ? parsed.data.error.message : undefined;
+    throw new ApiFailure(code, own, response.status);
   }
   const parsed = schema.safeParse(payload);
   if (!parsed.success) throw new ApiFailure('INVALID_RESPONSE', undefined, response.status);
   return parsed.data;
 }
+
+type PlanRequest = z.input<typeof planRequestSchema>;
 
 export class HttpApi implements AgensApi {
   readonly mode = 'server' as const;
@@ -63,6 +70,14 @@ export class HttpApi implements AgensApi {
   }
   async refresh(datasetId: string): Promise<Dataset> {
     return (await call(`/api/datasets/${encodeURIComponent(datasetId)}/refresh`, importResponseSchema, {})).dataset;
+  }
+  /** Slow chart planning with Gemini 3.8 Flash; returns only charts backed by real query evidence. */
+  async plan(request: PlanRequest): Promise<PlanResponse> {
+    return call('/api/dashboard/plan', planResponseSchema, request);
+  }
+  /** A short-lived single-use Live token. The permanent key stays on the server. */
+  async liveToken(): Promise<LiveTokenResponse> {
+    return call('/api/live/token', liveTokenResponseSchema, {});
   }
   async status(datasetId: string): Promise<SourceStatus> {
     return call(`/api/datasets/${encodeURIComponent(datasetId)}/status`, sourceStatusSchema);

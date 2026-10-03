@@ -3,6 +3,9 @@ import { datasetSchema, queryRequestSchema, queryResultSchema, validateQueryForD
   type DataAdapter, type Dataset, type QueryRequest, type QueryResult } from '../../shared/data.js';
 import { importRequestSchema, planRequestSchema, connectSourceRequestSchema, importInspectionResponseSchema,
   type ConnectSourceRequest,type ErrorCode, type ImportRequest } from '../../shared/api.js';
+import { planChart } from '../../shared/plan.js';
+import { planResponseSchema, type PlanResponse } from '../../shared/voice.js';
+import { ProviderError, type VoiceProvider } from '../voice/provider.js';
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: ErrorCode, message: string) { super(message); }
@@ -33,6 +36,8 @@ export interface ServiceOptions {
   createAdapter?: (context: { sessionId: string; signal: AbortSignal }) => SessionDataAdapter;
   now?: () => number;
   dataImplemented?:boolean;
+  /** Gemini Live tokens and chart planning (issue #4). Absent: voice and planner report unavailable. */
+  voice?: VoiceProvider;
   limits?: Partial<typeof defaultLimits>;
 }
 export const defaultLimits = { sessionTtlMs: 30 * 60 * 1000, maxSessions: 32, maxDatasets: 20,
@@ -58,8 +63,9 @@ export class ApiService {
   }
   health() {
     return { status: 'ok', stage: 'integration-skeleton', availability: {
-      data: this.options.createAdapter ? this.options.dataImplemented ? 'ready' : 'adapter-injected' : 'unavailable', voice: 'unavailable', planner: 'unavailable',
-    }, voiceImplemented: false, dataConnectorsImplemented: this.options.dataImplemented===true } as const;
+      data: this.options.createAdapter ? this.options.dataImplemented ? 'ready' : 'adapter-injected' : 'unavailable',
+      voice: this.options.voice ? 'configured' : 'unavailable', planner: this.options.voice ? 'configured' : 'unavailable',
+    }, voiceImplemented: Boolean(this.options.voice), dataConnectorsImplemented: this.options.dataImplemented===true } as const;
   }
   prune() {
     for (const session of this.sessions.values()) if (session.expiresAt <= this.now()) this.remove(session);
@@ -249,13 +255,62 @@ export class ApiService {
     }
     return { result: structuredClone(result) };
   }
-  plan(id: string, input: unknown): never {
+  /** Run a provider call with a deadline; map provider failures without leaking their details. */
+  private async provider<T>(session: Session, timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    session.controller.signal.addEventListener('abort', onAbort, { once: true });
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await Promise.race([run(controller.signal), new Promise<never>((_, reject) =>
+        controller.signal.addEventListener('abort', () => reject(new ProviderError('unavailable')), { once: true }))]);
+    } catch (error) {
+      if (error instanceof ProviderError && error.kind === 'quota') throw new ApiError(429, 'RESOURCE_LIMIT', 'The model quota is exhausted. Try again later.');
+      if (error instanceof ProviderError && error.kind === 'invalid-output') throw new ApiError(503, 'UNAVAILABLE', 'The planner returned an unusable plan.');
+      throw new ApiError(503, 'UNAVAILABLE', 'The model is unavailable right now.');
+    } finally {
+      clearTimeout(timer);
+      session.controller.signal.removeEventListener('abort', onAbort);
+    }
+  }
+  /**
+   * Plan charts with the model, then validate every draft against the owned dataset schema and
+   * run its query. Only charts backed by real stored evidence are returned.
+   */
+  async plan(id: string, input: unknown): Promise<PlanResponse> {
     const request = planRequestSchema.parse(input);
-    this.get(id);
+    const session = this.get(id);
     for (const reference of [...request.evidence, ...request.dashboard.charts]) {
       this.evidence(id, reference.queryId, reference.datasetId);
     }
-    throw unavailable();
+    const voice = this.options.voice;
+    if (!voice) throw unavailable();
+    const datasets = [...session.datasets.values()].map(value => structuredClone(value.public));
+    if (!datasets.length) throw new ApiError(400, 'INVALID_REQUEST', 'Connect a dataset before planning charts.');
+    const output = await this.provider(session, 30_000, signal => voice.plan({ prompt: request.prompt, datasets, dashboard: request.dashboard }, signal));
+    const charts: PlanResponse['charts'] = [];
+    const skipped: string[] = [];
+    for (const draft of output.charts) {
+      const owned = session.datasets.get(draft.datasetId);
+      if (!owned) { skipped.push('A planned chart referred to a dataset that is not connected.'); continue; }
+      let planned;
+      try { planned = planChart(draft, owned.public); }
+      catch (error) { skipped.push(`${draft.title ?? draft.kind}: ${(error as Error).message}`.slice(0, 300)); continue; }
+      try {
+        const { result } = await this.query(id, planned.request);
+        charts.push({ chart: { datasetId: owned.public.id, title: (draft.title ?? planned.title).slice(0, 200), kind: draft.kind,
+          fields: planned.fields, queryId: result.queryId }, result });
+      } catch {
+        skipped.push(`${draft.title ?? planned.title}: the query could not run.`.slice(0, 300));
+      }
+    }
+    return planResponseSchema.parse({ ...(request.requestId ? { requestId: request.requestId } : {}), charts, skipped, summary: output.summary });
   }
-  live(id: string): never { this.get(id); throw unavailable(); }
+  /** A short-lived, single-use Live token. The permanent key never leaves the server. */
+  async live(id: string) {
+    const session = this.get(id);
+    const voice = this.options.voice;
+    if (!voice) throw unavailable();
+    return this.provider(session, 10_000, signal => voice.createLiveToken(signal));
+  }
 }

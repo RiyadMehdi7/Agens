@@ -23,13 +23,15 @@ export type ServerData = 'checking' | 'available' | 'unavailable' | 'unreachable
 /** A workbook waiting for the user to pick one of several sheets. */
 export interface SheetChoice { name: string; contentBase64: string; sheets: string[] }
 export type SourceState = 'refreshing' | 'failed';
+export type AddOutcome = { ok: true; chart: Chart; result: QueryResult } | { ok: false; reason: string };
+export type PlanOutcome = { ok: true; added: Chart[]; results: QueryResult[]; skipped: string[]; summary: string } | { ok: false; reason: string };
 
 /** Dashboard actions without expectedRevision; dispatch supplies the current one. */
 export type DashboardAction = { type: 'add'; chart: Chart } | { type: 'update'; chartId: string; patch: Partial<Pick<Chart, 'title' | 'kind' | 'fields'>> }
   | { type: 'remove'; chartId: string } | { type: 'reorder'; chartIds: string[] } | { type: 'select'; chartId: string | null };
 
 const emptyDashboard: Dashboard = { revision: 0, charts: [], selectedChartId: null };
-const http = new HttpApi();
+export const http = new HttpApi();
 const sample = new SampleApi();
 
 async function toBase64(file: File): Promise<string> {
@@ -42,6 +44,7 @@ async function toBase64(file: File): Promise<string> {
 export function useCanvas() {
   const [api, setApi] = useState<AgensApi>(http);
   const [serverData, setServerData] = useState<ServerData>('checking');
+  const [voiceReady, setVoiceReady] = useState(false);
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard>(emptyDashboard);
@@ -68,7 +71,8 @@ export function useCanvas() {
     let live = true;
     fetch('/api/health', { credentials: 'same-origin' })
       .then(r => r.json())
-      .then(async (body: { availability?: { data?: string } }) => {
+      .then(async (body: { availability?: { data?: string; voice?: string } }) => {
+        if (live) setVoiceReady(body.availability?.voice === 'configured');
         const available = ['adapter-injected', 'ready'].includes(body.availability?.data ?? '');
         if (live) setServerData(available ? 'available' : 'unavailable');
         if (!available) return;
@@ -182,32 +186,84 @@ export function useCanvas() {
     setStatus({ text: 'Using synthetic sample data. Nothing here is real.', tone: 'info' });
   }, [resetCanvas]);
 
-  const addChart = useCallback(async (draft: ChartDraft) => {
+  /** Add one chart. Resolves with the chart and its evidence, or a readable reason (voice tools speak it). */
+  const addChart = useCallback(async (draft: ChartDraft, titleOverride?: string): Promise<AddOutcome> => {
     const dataset = datasets.find(d => d.id === activeId);
-    if (!dataset) { setStatus({ text: 'Connect a source first.', tone: 'error' }); return; }
+    const reject = (reason: string): AddOutcome => { setStatus({ text: reason, tone: 'error' }); return { ok: false, reason }; };
+    if (!dataset) return reject('Connect a source first.');
     let planned;
     try { planned = planChart(draft, dataset); }
-    catch (error) { setStatus({ text: (error as Error).message, tone: 'error' }); return; }
+    catch (error) { return reject((error as Error).message); }
     const key = newChartId();
-    const tile: PendingTile = { key, title: planned.title, kind: draft.kind, size: defaultSize[draft.kind],
+    const title = (titleOverride?.trim() || planned.title).slice(0, 200);
+    const tile: PendingTile = { key, title, kind: draft.kind, size: defaultSize[draft.kind],
       color: dashboardRef.current.charts.length % palette.length };
     const gen = generation.current;
     setPending(list => [...list, tile]);
     setStatus(null);
     try {
       const result = await api.query(planned.request);
-      if (gen !== generation.current) return; // The canvas was reset while this query ran.
-      const chart: Chart = { id: key, datasetId: dataset.id, title: planned.title.slice(0, 200), kind: draft.kind,
-        fields: planned.fields, queryId: result.queryId };
+      if (gen !== generation.current) return { ok: false, reason: 'The canvas was cleared while the query ran.' };
+      const chart: Chart = { id: key, datasetId: dataset.id, title, kind: draft.kind, fields: planned.fields, queryId: result.queryId };
       setResults(r => ({ ...r, [result.queryId]: result }));
       setLayout(l => ({ ...l, [key]: { size: tile.size, color: tile.color } }));
-      dispatch({ type: 'add', chart });
+      if (!dispatch({ type: 'add', chart })) return { ok: false, reason: 'The dashboard changed; try again.' };
+      return { ok: true, chart, result };
     } catch (error) {
       if (gen === generation.current) fail(error);
+      return { ok: false, reason: toFailure(error).message };
     } finally {
       setPending(list => list.filter(p => p.key !== key));
     }
   }, [activeId, api, datasets, dispatch, fail]);
+
+  const plans = useRef(new Map<string, { cancelled: boolean; keys: string[] }>());
+  /**
+   * Slow, asynchronous planning (voice "build me a dashboard"). Placeholder tiles fog in at once;
+   * results are applied only if this request was not cancelled and the canvas was not reset meanwhile.
+   */
+  const planDashboard = useCallback(async (prompt: string, requestId: string): Promise<PlanOutcome> => {
+    if (apiRef.current.mode !== 'server') return { ok: false, reason: 'Planning needs the data service; sample mode cannot plan.' };
+    if (!datasets.length) return { ok: false, reason: 'No data is connected yet.' };
+    const gen = generation.current;
+    const keys = [newChartId(), newChartId()];
+    const base = dashboardRef.current.charts.length;
+    plans.current.set(requestId, { cancelled: false, keys });
+    setPending(list => [...list, ...keys.map((key, i) => ({ key, title: 'Planning…', kind: (i ? 'bar' : 'line') as Chart['kind'],
+      size: i ? 1 : 2, color: (base + i) % palette.length }))]);
+    try {
+      const { charts: current, selectedChartId } = dashboardRef.current;
+      const evidence = current.map(c => ({ datasetId: c.datasetId, queryId: c.queryId }));
+      const plan = await http.plan({ requestId, prompt: prompt.slice(0, 4000), dashboard: { ...dashboardRef.current, charts: current, selectedChartId }, evidence });
+      const entry = plans.current.get(requestId);
+      if (!entry || entry.cancelled || gen !== generation.current) return { ok: false, reason: 'That request was cancelled.' };
+      const added: Chart[] = [];
+      plan.charts.forEach(({ chart, result }, i) => {
+        const id = newChartId();
+        const full: Chart = { ...chart, id };
+        setResults(r => ({ ...r, [result.queryId]: result }));
+        setLayout(l => ({ ...l, [id]: { size: defaultSize[chart.kind], color: (base + i) % palette.length } }));
+        if (dispatch({ type: 'add', chart: full })) added.push(full);
+      });
+      return { ok: true, added, results: plan.charts.map(c => c.result), skipped: plan.skipped, summary: plan.summary };
+    } catch (error) {
+      if (gen === generation.current) fail(error);
+      return { ok: false, reason: toFailure(error).message };
+    } finally {
+      plans.current.delete(requestId);
+      setPending(list => list.filter(p => !keys.includes(p.key)));
+    }
+  }, [datasets.length, dispatch, fail]);
+
+  /** Cancel in-flight planning: its placeholders vanish and its late result is discarded. */
+  const cancelPlans = useCallback((requestIds: string[]) => {
+    for (const id of requestIds) {
+      const entry = plans.current.get(id);
+      if (!entry) continue;
+      entry.cancelled = true;
+      setPending(list => list.filter(p => !entry.keys.includes(p.key)));
+    }
+  }, []);
 
   /** Point a chart at newer evidence, keeping its place and the current selection. */
   const replaceEvidence = useCallback((chartId: string, queryId: string) => {
@@ -291,10 +347,10 @@ export function useCanvas() {
   }), [dispatch]);
 
   return {
-    api, serverData, datasets, activeDataset: datasets.find(d => d.id === activeId) ?? null, setActiveId,
+    api, serverData, voiceReady, datasets, activeDataset: datasets.find(d => d.id === activeId) ?? null, setActiveId,
     dashboard, results, layout, pending, importing, status, setStatus,
     importFile, loadSample, addChart, dispatch, ...controls,
-    sheetChoice, chooseSheet, connecting, connectSource, sourceState, refreshDataset,
+    sheetChoice, chooseSheet, connecting, connectSource, sourceState, refreshDataset, planDashboard, cancelPlans,
   };
 }
 
