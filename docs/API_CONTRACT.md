@@ -78,4 +78,9 @@ Default limits:32 sessions,30min fixed lifetime,20 datasets and50 queries per se
 
 ## Verification
 
+Data runtime follow-up: DATA_RUNTIME.md documents the additive inspection, configured-source attach,
+refresh and status endpoints. The actual application now injects RuntimeDataAdapter; health data is
+ready and dataConnectorsImplemented=true. Generic createApiServer without an adapter still reports
+unavailable; fixture-only injection still reports adapter-injected. Voice/planner remain unavailable.
+
 October3 on Matrix: `npm run check`, `npm test` (14/14, real localhost TCP), `npm run build` pass. Tests inject synthetic adapters and verify schemas, ownership, mismatch, immutable evidence, expiry, byte/session limits, timeout, redaction, origin/content/oversize handling including chunked bodies. The runtime also returned health200, unimplemented data503 and foreign-origin403. No real parser, workbook, database, browser voice or production deployment is claimed by these checks.

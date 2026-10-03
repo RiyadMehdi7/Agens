@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { datasetSchema, queryRequestSchema, queryResultSchema, validateQueryForDataset,
   type DataAdapter, type Dataset, type QueryRequest, type QueryResult } from '../../shared/data.js';
-import { importRequestSchema, planRequestSchema, type ErrorCode, type ImportRequest } from '../../shared/api.js';
+import { importRequestSchema, planRequestSchema, connectSourceRequestSchema, importInspectionResponseSchema,
+  type ConnectSourceRequest,type ErrorCode, type ImportRequest } from '../../shared/api.js';
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: ErrorCode, message: string) { super(message); }
@@ -22,17 +23,21 @@ function frozenCopy<T>(value: T): T {
 /** A fresh, isolated adapter per issued session. Never return a shared mutable adapter. */
 export interface SessionDataAdapter extends DataAdapter {
   importDataset?(request: ImportRequest, context: { signal: AbortSignal }): Promise<Dataset>;
+  inspectImport?(request:ImportRequest,context:{signal:AbortSignal}):Promise<{sheets:string[]}>;
+  connectSource?(request:ConnectSourceRequest,context:{signal:AbortSignal}):Promise<Dataset>;
+  refreshDataset?(id:string,context:{signal:AbortSignal}):Promise<Dataset>;
   query(datasetId: string, request: QueryRequest, context?: { signal: AbortSignal }): Promise<QueryResult>;
   dispose?(): void;
 }
 export interface ServiceOptions {
   createAdapter?: (context: { sessionId: string; signal: AbortSignal }) => SessionDataAdapter;
   now?: () => number;
+  dataImplemented?:boolean;
   limits?: Partial<typeof defaultLimits>;
 }
 export const defaultLimits = { sessionTtlMs: 30 * 60 * 1000, maxSessions: 32, maxDatasets: 20,
   maxQueries: 50, maxEvidenceBytes: 2 * 1024 * 1024, operationTimeoutMs: 5000 };
-interface OwnedDataset { public: Dataset; internalId: string }
+interface OwnedDataset { public: Dataset; internalId: string; lastError?:string }
 interface Session {
   id: string; expiresAt: number; controller: AbortController; adapter?: SessionDataAdapter;
   datasets: Map<string, OwnedDataset>; queries: Map<string, QueryResult>; bytes: number; busy: boolean;
@@ -53,8 +58,8 @@ export class ApiService {
   }
   health() {
     return { status: 'ok', stage: 'integration-skeleton', availability: {
-      data: this.options.createAdapter ? 'adapter-injected' : 'unavailable', voice: 'unavailable', planner: 'unavailable',
-    }, voiceImplemented: false, dataConnectorsImplemented: false } as const;
+      data: this.options.createAdapter ? this.options.dataImplemented ? 'ready' : 'adapter-injected' : 'unavailable', voice: 'unavailable', planner: 'unavailable',
+    }, voiceImplemented: false, dataConnectorsImplemented: this.options.dataImplemented===true } as const;
   }
   prune() {
     for (const session of this.sessions.values()) if (session.expiresAt <= this.now()) this.remove(session);
@@ -129,6 +134,9 @@ export class ApiService {
     const adapter = this.adapter(session);
     if (!adapter.importDataset) throw unavailable();
     const raw = await this.operation(session, signal => adapter.importDataset!(request, { signal }));
+    return this.register(session,raw);
+  }
+  private register(session:Session,raw:Dataset) {
     const parsed = datasetSchema.safeParse(raw);
     if (!parsed.success) throw new ApiError(503, 'UNAVAILABLE', 'Adapter returned invalid data.');
     if ([...session.datasets.values()].some(value => value.internalId === parsed.data.id)) {
@@ -141,6 +149,46 @@ export class ApiService {
     session.bytes += bytes;
     return { dataset: structuredClone(dataset) };
   }
+  async inspect(id:string,input:unknown) {
+    const request=importRequestSchema.parse(input);
+    if(Buffer.from(request.contentBase64,'base64').length>256*1024) throw new ApiError(413,'PAYLOAD_TOO_LARGE','Import exceeds byte limit.');
+    const session=this.get(id),adapter=this.adapter(session);
+    if(!adapter.inspectImport) throw unavailable();
+    const output=await this.operation(session,signal=>adapter.inspectImport!(request,{signal}));
+    const parsed=importInspectionResponseSchema.safeParse(output);
+    if(!parsed.success) throw new ApiError(503,'UNAVAILABLE','Adapter returned invalid inspection.');
+    return parsed.data;
+  }
+  async connect(id:string,input:unknown) {
+    const request=connectSourceRequestSchema.parse(input),session=this.get(id);
+    if(session.datasets.size>=this.limits.maxDatasets) throw limited();
+    const adapter=this.adapter(session);if(!adapter.connectSource) throw unavailable();
+    const raw=await this.operation(session,signal=>adapter.connectSource!(request,{signal}));
+    if(raw.freshness!=='live' || !['api','database'].includes(raw.kind)) throw new ApiError(503,'UNAVAILABLE','Source has not been verified.');
+    return this.register(session,raw);
+  }
+  private metadata(session:Session,owned:OwnedDataset,raw:Dataset) {
+    const parsed=datasetSchema.safeParse(raw);
+    if(!parsed.success || parsed.data.id!==owned.internalId || parsed.data.kind!==owned.public.kind) throw new ApiError(503,'UNAVAILABLE','Adapter returned invalid metadata.');
+    const next=frozenCopy({...parsed.data,id:owned.public.id,sourceId:owned.public.sourceId});
+    const delta=Buffer.byteLength(JSON.stringify(next))-Buffer.byteLength(JSON.stringify(owned.public));
+    if(session.bytes+delta>this.limits.maxEvidenceBytes) throw limited();
+    session.bytes+=delta;owned.public=next;owned.lastError=undefined;
+    return {dataset:structuredClone(next)};
+  }
+  async refresh(id:string,datasetId:string) {
+    const session=this.get(id),owned=session.datasets.get(datasetId);if(!owned) throw missing();
+    const adapter=this.adapter(session);if(!adapter.refreshDataset) throw unavailable();
+    try {
+      const raw=await this.operation(session,signal=>adapter.refreshDataset!(owned.internalId,{signal}));
+      return this.metadata(session,owned,raw);
+    } catch(error) {owned.lastError='Refresh failed; showing last verified capture.';throw error;}
+  }
+  sourceStatus(id:string,datasetId:string) {
+    const owned=this.get(id).datasets.get(datasetId);if(!owned) throw missing();
+    return {datasetId,state:owned.lastError?'failed':owned.public.freshness==='live'?'verified':'snapshot',
+      lastVerifiedAt:owned.public.capturedAt,...(owned.lastError?{lastError:owned.lastError}:{})};
+  }
   async query(id: string, input: unknown) {
     const parsed = queryRequestSchema.parse(input);
     const session = this.get(id);
@@ -152,8 +200,15 @@ export class ApiService {
     catch { throw new ApiError(400, 'INVALID_REQUEST', 'Query does not match dataset schema.'); }
     if (session.queries.size >= this.limits.maxQueries) throw limited();
     const adapter = this.adapter(session);
-    const raw = await this.operation(session, signal => adapter.query(owned.internalId,
-      { ...structuredClone(request), datasetId: owned.internalId }, { signal }));
+    let completed:{raw:QueryResult;current?:Dataset};
+    try {completed = await this.operation(session, async signal => {
+      const raw=await adapter.query(owned.internalId,
+        { ...structuredClone(request), datasetId: owned.internalId }, { signal });
+      const current=(await adapter.listDatasets()).find(d=>d.id===owned.internalId);
+      return {raw,current};
+    });}
+    catch(error) {owned.lastError='Query failed; showing last verified capture.';throw error;}
+    const {raw,current}=completed;
     const output = queryResultSchema.safeParse(raw);
     if (!output.success || output.data.datasetId !== owned.internalId || output.data.rows.length > request.limit) {
       throw new ApiError(503, 'UNAVAILABLE', 'Adapter returned invalid evidence.');
@@ -177,10 +232,12 @@ export class ApiService {
       }
     }
     const evidence = frozenCopy({ ...output.data, queryId: identifier(), datasetId: owned.public.id, normalizedRequest: request });
+    if(current && JSON.stringify(current.columns)===JSON.stringify(owned.public.columns)) this.metadata(session,owned,current);
     const bytes = Buffer.byteLength(JSON.stringify(evidence));
     if (session.bytes + bytes > this.limits.maxEvidenceBytes) throw limited();
     session.bytes += bytes;
     session.queries.set(evidence.queryId, evidence);
+    owned.lastError=undefined;
     return { result: structuredClone(evidence) };
   }
   evidence(id: string, queryId: string, datasetId?: string) {

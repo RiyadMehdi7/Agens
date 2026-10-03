@@ -8,6 +8,9 @@ export const importRequestSchema = z.object({
   sheet: z.string().min(1).max(100).optional(), requestId: idSchema.optional(),
 }).strict().refine(value => value.format === 'xlsx' || value.sheet === undefined, 'CSV has no sheets');
 export type ImportRequest = z.infer<typeof importRequestSchema>;
+export const connectSourceRequestSchema=z.object({sourceId:idSchema,accessToken:z.string().min(32).max(512)}).strict();
+export type ConnectSourceRequest=z.infer<typeof connectSourceRequestSchema>;
+export const importInspectionResponseSchema=z.object({sheets:z.array(z.string().min(1).max(100)).max(20)}).strict();
 export const evidenceReferenceSchema = z.object({ datasetId: idSchema, queryId: idSchema }).strict();
 export const planRequestSchema = z.object({
   requestId: idSchema.optional(), prompt: z.string().min(1).max(4000),
@@ -29,6 +32,6 @@ export const importResponseSchema = z.object({ dataset: datasetSchema }).strict(
 export const queryResponseSchema = z.object({ result: queryResultSchema }).strict();
 export const healthResponseSchema = z.object({
   status: z.literal('ok'), stage: z.literal('integration-skeleton'),
-  availability: z.object({ data: z.enum(['unavailable', 'adapter-injected']), voice: z.literal('unavailable'), planner: z.literal('unavailable') }).strict(),
-  voiceImplemented: z.literal(false), dataConnectorsImplemented: z.literal(false),
+  availability: z.object({ data: z.enum(['unavailable', 'adapter-injected', 'ready']), voice: z.literal('unavailable'), planner: z.literal('unavailable') }).strict(),
+  voiceImplemented: z.literal(false), dataConnectorsImplemented: z.boolean(),
 }).strict();

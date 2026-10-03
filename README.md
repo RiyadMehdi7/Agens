@@ -6,9 +6,11 @@ ask about a selected chart, compare periods, and explain trends from actual quer
 
 ## Current status
 
-This repository contains the development foundation: validated dashboard commands,
-data adapter interfaces, Gemini 3.8 configuration, a local health endpoint, CI and Matrix/Codex setup.
-The frontend, live audio connection, source connectors and renderer registry are not implemented yet.
+The backend now starts with bounded Excel/CSV ingestion, deterministic analytics queries,
+session-owned immutable evidence, worksheet discovery, and owner-configured read-only Postgres
+and HTTPS JSON connectors. Uploads work without connector configuration. See
+[data setup and verification](docs/DATA_RUNTIME.md) for connection setup and a repeatable smoke check.
+Frontend, live audio and renderer work remain separate tracks; this is not yet a complete voice dashboard.
 
 ## Local validation
 
