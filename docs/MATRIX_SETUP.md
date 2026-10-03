@@ -20,4 +20,5 @@ Report each returned terminal tab ID and its reattach command.
 Expected evidence: authenticated Matrix identity, remote checkout/commit, successful remote checks,
 Codex running there, provider model access and finally live voice/data demo. These are separate gates.
 
-No Matrix execution has been verified by merely preparing this file.
+See [SETUP_STATUS.md](SETUP_STATUS.md) for the verified Matrix execution on 3 October 2026.
+Preparing setup instructions alone does not verify a cloud runtime.
