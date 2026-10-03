@@ -34,7 +34,7 @@ sources (left), microphone (centre), add chart (right). Nothing else is on scree
 | `src/api/errors.ts` | Maps contract error codes to user-safe text. Server messages are never shown verbatim. |
 | `src/api/sample.ts` | In-browser **sample** fixture used only when the server reports no data adapter. The dataset's freshness is `sample`, the name says synthetic, and every tile footer says “sample data”. |
 | `src/canvas/plan.ts` | Turns a manual chart request into a bounded declarative `QueryRequest` (no SQL or JS). Voice planning should produce the same shape. |
-| `src/canvas/registry.ts` | Renderer registry: `line`, `bar`, `table`, `metric`. Each renderer validates the actual `QueryResult` rows and `chart.fields` before drawing, and returns a readable reason when they do not fit. Other shared kinds (`area`, `scatter`, `pie`, `heatmap`, `treemap`, `sankey`) are listed as “not available yet”. |
+| `src/canvas/registry.ts` | Renderer registry covering every kind in the shared schema: line, area, bar, donut (`pie`), treemap, metric, scatter, heatmap, sankey and table. Each renderer validates the actual `QueryResult` rows and `chart.fields` before drawing (types, arity, non-negative part-of-whole values, category limits) and returns a readable reason when they do not fit. Layout maths (signed bars, squarified treemap, donut arcs, sankey bands) lives in `src/canvas/geometry.ts` and is unit-tested. |
 | `src/canvas/useCanvas.ts` | Canvas state. `dispatch()` is the single entry point for dashboard changes and always goes through the shared `applyDashboardAction` with the current revision. Colour and size are client-side presentation only and never touch the shared dashboard or evidence. |
 | `src/components/*` | Chart tiles and renderers, the icon-first sources popover (also used on the empty canvas) and the add panel. |
 
@@ -46,7 +46,7 @@ sources (left), microphone (centre), add chart (right). Nothing else is on scree
   If the data no longer fits (for example a 9-row result shown as a metric), the tile says so instead of re-querying.
 - Reorder sends the complete chart ID list. Remove clears selection through the reducer.
   Selection is the reducer's `selectedChartId`, which is how “this chart” will resolve for voice.
-- Tile footers show the evidence: aggregation, capture time, truncation and freshness.
+- Tiles carry no footer. The full evidence record (aggregation, freshness, capture time, truncation) is the chart title's tooltip; synthetic data and truncated results are always marked inline with `sample` / `partial`.
 - Workbook sheet discovery is not in the contract yet, so the sources popover has an optional sheet-name control (layers icon).
 - After a reload the canvas lists the session's datasets again. Charts are client state and are not restored.
 

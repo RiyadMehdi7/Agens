@@ -25,6 +25,9 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
   const [closing, setClosing] = useState(false);
   // Let the blur-out play before the reducer removes the chart.
   const close = () => { if (closing) return; setClosing(true); setTimeout(() => canvas.remove(chart.id), 260); };
+  const provenance = result
+    ? `${result.aggregation === 'none' ? 'Rows' : result.aggregation} · ${freshness ?? 'snapshot'} ${formatTime(result.capturedAt)}${result.truncated ? ' · partial' : ''}${selected ? ' · selected' : ''}`
+    : 'Query evidence missing';
   const kinds = supportedKinds.some(k => k.kind === chart.kind) ? supportedKinds : [...supportedKinds, { kind: chart.kind, label: kindLabel(chart.kind) }];
   return (
     <section className={`tile${selected ? ' selected' : ''}${closing ? ' closing' : ''}`} style={{ gridColumn: `span ${size.span}`, height: size.height }}
@@ -35,7 +38,10 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
       }}>
       <header>
         <button className="tile-title" onClick={() => canvas.select(selected ? null : chart.id)} aria-pressed={selected}
-          title={selected ? 'Selected. Click to clear.' : 'Select this chart'}>{chart.title}</button>
+          title={provenance}>{chart.title}</button>
+        {/* Only exceptional provenance is shown inline; the full record is in the title tooltip. */}
+        {freshness === 'sample' && <span className="mark sample" title="Synthetic sample data, not real">sample</span>}
+        {result?.truncated && <span className="mark partial" title={`Limited to the first ${result.rows.length} rows`}>partial</span>}
         <div className="tools">
           <label className="sr-only" htmlFor={`kind-${chart.id}`}>Chart type</label>
           <select id={`kind-${chart.id}`} className="kind-select" value={chart.kind}
@@ -55,15 +61,6 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
           : check.empty ? <p className="notice">No rows match this query.</p>
           : <ChartView data={check.data} color={color} title={chart.title} />}
       </div>
-      <footer>
-        <span title={result?.aggregation}>{result ? `${result.aggregation} · ${formatTime(result.capturedAt)}` : chart.queryId}</span>
-        <span>
-          {result?.truncated && <span className="tag warn" title="The query limit cut off some rows">truncated</span>}{' '}
-          {/* Provenance always stays visible; selection is shown alongside it, never instead. */}
-          {selected && <span className="tag sel">this chart</span>}{' '}
-          {freshness ?? ''}
-        </span>
-      </footer>
     </section>
   );
 }
@@ -76,7 +73,6 @@ export function PendingChartTile({ tile }: { tile: PendingTile }) {
       <div className="orb" style={{ background: color }} />
       <header><span className="tile-title" style={{ color: 'var(--muted)' }}>{tile.title}</span></header>
       <div className="body fog"><Ghost /></div>
-      <footer><span>querying…</span><span>{kindLabel(tile.kind)}</span></footer>
     </section>
   );
 }

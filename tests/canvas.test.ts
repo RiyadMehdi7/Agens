@@ -6,7 +6,7 @@ import { evaluateSample, sampleDataset, sampleRows } from '../src/api/sample.js'
 import { planChart } from '../src/canvas/plan.js';
 import { checkChart, unsupportedKinds } from '../src/canvas/registry.js';
 import { formatCell } from '../src/canvas/format.js';
-import { barSpans } from '../src/canvas/geometry.js';
+import { barSpans, pieArcs, sankeyLayout, squarify } from '../src/canvas/geometry.js';
 
 const run = (input: ReturnType<typeof planChart>['request']): QueryResult =>
   ({ queryId: 'q1', ...evaluateSample(sampleDataset, sampleRows(), validateQueryForDataset(input, sampleDataset)) });
@@ -60,7 +60,7 @@ test('renderer registry validates actual evidence and stays explicit about unsup
   const text = checkChart({ kind: 'bar', fields: ['sum_revenue', 'month'] }, series);
   assert.ok(!text.ok && /not numeric/.test(text.reason));
   for (const kind of unsupportedKinds) assert.ok(!checkChart({ kind, fields }, series).ok);
-  assert.deepEqual(unsupportedKinds, ['area', 'scatter', 'pie', 'heatmap', 'treemap', 'sankey']);
+  assert.deepEqual(unsupportedKinds, []);
   const empty = checkChart({ kind: 'bar', fields }, { ...series, rows: [] });
   assert.ok(empty.ok && empty.empty);
 });
@@ -114,4 +114,59 @@ test('bars use a signed scale with a shared zero baseline', () => {
   assert.deepEqual(mixed.spans[0], { left: 0, width: 25, negative: true });
   assert.deepEqual(mixed.spans[1], { left: 25, width: 75, negative: false });
   assert.equal(barSpans([0, 0]).spans[0]?.width, 0);
+});
+
+test('every shared chart kind plans a valid query and renders from the fixture', () => {
+  const drafts = [
+    { kind: 'line', dimension: 'month', measure: 'revenue', op: 'sum' },
+    { kind: 'area', dimension: 'month', measure: 'revenue', op: 'sum' },
+    { kind: 'bar', dimension: 'region', measure: 'revenue', op: 'sum' },
+    { kind: 'pie', dimension: 'region', measure: 'revenue', op: 'sum' },
+    { kind: 'treemap', dimension: 'region', measure: 'accounts', op: 'sum' },
+    { kind: 'metric', measure: 'revenue', op: 'avg' },
+    { kind: 'scatter', op: 'sum', x: 'accounts', y: 'revenue' },
+    { kind: 'heatmap', dimension: 'region', dimension2: 'month', measure: 'revenue', op: 'sum' },
+    { kind: 'sankey', dimension: 'region', dimension2: 'month', measure: 'revenue', op: 'sum' },
+    { kind: 'table', op: 'sum', columns: ['region', 'revenue'] },
+  ] as const;
+  for (const draft of drafts) {
+    const planned = planChart(draft, sampleDataset);
+    const result = run(planned.request);
+    const check = checkChart({ kind: draft.kind, fields: planned.fields }, result);
+    assert.ok(check.ok && !check.empty, `${draft.kind}: ${check.ok ? 'empty' : check.reason}`);
+    assert.equal(check.data.kind, draft.kind);
+  }
+  const heat = checkChart({ kind: 'heatmap', fields: planChart(drafts[7], sampleDataset).fields }, run(planChart(drafts[7], sampleDataset).request));
+  assert.ok(heat.ok && heat.data.kind === 'heatmap' && heat.data.rows.length === 4 && heat.data.cols.length === 9);
+  assert.throws(() => planChart({ kind: 'scatter', op: 'sum', x: 'region', y: 'revenue' }, sampleDataset), /numeric/);
+  assert.throws(() => planChart({ kind: 'sankey', dimension: 'region', dimension2: 'region', op: 'count' }, sampleDataset), /different/);
+});
+
+test('part-of-whole charts refuse negative values and too many slices', () => {
+  const base = run(planChart({ kind: 'bar', dimension: 'region', measure: 'revenue', op: 'sum' }, sampleDataset).request);
+  const negative = { ...base, rows: base.rows.map((r, i) => ({ ...r, sum_revenue: i === 0 ? -5 : r.sum_revenue ?? null })) };
+  for (const kind of ['pie', 'treemap'] as const) {
+    const check = checkChart({ kind, fields: ['region', 'sum_revenue'] }, negative);
+    assert.ok(!check.ok && /negative/.test(check.reason));
+  }
+  const many = { ...base, rows: Array.from({ length: 13 }, (_, i) => ({ region: `r${i}`, sum_revenue: i + 1 })) };
+  const pie = checkChart({ kind: 'pie', fields: ['region', 'sum_revenue'] }, many);
+  assert.ok(!pie.ok && /too many/.test(pie.reason));
+  assert.ok(checkChart({ kind: 'bar', fields: ['region', 'sum_revenue'] }, many).ok);
+});
+
+test('treemap, donut and sankey layouts conserve their totals', () => {
+  const rects = squarify([6, 6, 4, 3, 2, 2, 1], { x: 0, y: 0, w: 60, h: 40 });
+  const area = rects.reduce((a, r) => a + r.w * r.h, 0);
+  assert.ok(Math.abs(area - 2400) < 1e-6);
+  for (const r of rects) assert.ok(r.x >= -1e-9 && r.y >= -1e-9 && r.x + r.w <= 60 + 1e-9 && r.y + r.h <= 40 + 1e-9);
+  assert.ok(Math.abs(rects[0]!.w * rects[0]!.h - 600) < 1e-6);
+  assert.deepEqual(squarify([0, 0]).map(r => r.w), [0, 0]);
+  const arcs = pieArcs([1, 1, 2]);
+  assert.deepEqual(arcs.map(a => a.length), [0.25, 0.25, 0.5]);
+  assert.equal(arcs[2]!.start, 0.5);
+  const sk = sankeyLayout([{ source: 'A', target: 'X', value: 30 }, { source: 'A', target: 'Y', value: 10 }, { source: 'B', target: 'X', value: 60 }], 0);
+  assert.deepEqual(sk.left.map(n => [n.name, n.h]), [['A', 40], ['B', 60]]);
+  assert.deepEqual(sk.right.map(n => [n.name, n.h]), [['X', 90], ['Y', 10]]);
+  assert.deepEqual(sk.links.map(l => [l.sy, l.sh, l.ty, l.th]), [[0, 30, 0, 30], [30, 10, 90, 10], [40, 60, 30, 60]]);
 });

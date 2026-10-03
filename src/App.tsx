@@ -12,7 +12,7 @@ export function App() {
   const { dashboard, activeDataset, pending } = canvas;
   const hasTiles = dashboard.charts.length > 0 || pending.length > 0;
   const busy = pending.length > 0 || !!canvas.importing;
-  const freshness = new Map(canvas.datasets.map(d => [d.id, d.freshness === 'sample' ? 'sample data' : d.freshness]));
+  const freshness = new Map(canvas.datasets.map(d => [d.id, d.freshness]));
 
   return (
     <div className="app">

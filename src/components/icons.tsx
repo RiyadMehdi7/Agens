@@ -32,3 +32,20 @@ export const UploadIcon = () => (
 export const LayersIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M12 3 3 8l9 5 9-5z" /><path d="m3 13 9 5 9-5" /></svg>
 );
+
+/** Glyphs for chart types; each is a tiny drawing of the chart itself. */
+export const KindIcon = ({ kind }: { kind: string }) => {
+  const paths: Record<string, React.ReactNode> = {
+    line: <path d="M3 17l5-5 4 3 9-9" />,
+    area: <><path d="M3 18l5-6 4 3 9-8v11z" fill="currentColor" fillOpacity=".25" /><path d="M3 18l5-6 4 3 9-8" /></>,
+    bar: <><path d="M4 7h10M4 12h16M4 17h7" strokeWidth={2.4} /></>,
+    pie: <><circle cx="12" cy="12" r="8" /><path d="M12 4v8l6 5" /></>,
+    treemap: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16M12 12h9M16.5 12v8" /></>,
+    metric: <path d="M4 18V6M8 18V9M20 6h-8M20 12h-8M20 18h-8" />,
+    scatter: <><circle cx="6" cy="16" r="1.4" fill="currentColor" /><circle cx="10" cy="10" r="1.4" fill="currentColor" /><circle cx="14" cy="13" r="1.4" fill="currentColor" /><circle cx="18" cy="6" r="1.4" fill="currentColor" /><path d="M3 3v18h18" strokeOpacity=".5" /></>,
+    heatmap: <><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor" fillOpacity=".7" /><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" fillOpacity=".25" /><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" fillOpacity=".35" /><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" fillOpacity=".9" /></>,
+    sankey: <><path d="M3 6c9 0 9 8 18 8M3 12c9 0 9-6 18-6M3 18c9 0 9 0 18 0" /></>,
+    table: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M3 15h18M10 4v16" /></>,
+  };
+  return <svg width="20" height="20" viewBox="0 0 24 24" {...stroke} aria-hidden="true">{paths[kind]}</svg>;
+};

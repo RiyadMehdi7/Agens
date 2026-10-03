@@ -4,9 +4,14 @@ import type { QueryInput } from '../api/types.js';
 
 export type Aggregate = 'sum' | 'avg' | 'count' | 'min' | 'max';
 export interface ChartDraft {
-  kind: 'metric' | 'line' | 'bar' | 'table';
+  kind: Chart['kind'];
   dimension?: string;
+  /** Second category: heatmap columns or sankey targets. */
+  dimension2?: string;
   measure?: string;
+  /** Scatter axes. */
+  x?: string;
+  y?: string;
   op: Aggregate;
   columns?: readonly string[];
 }
@@ -41,6 +46,13 @@ export function planChart(draft: ChartDraft, dataset: Dataset, requestId?: strin
     if (!columns.length) throw new Error('Choose at least one column.');
     return { request: { ...base, projection: columns, limit: 50 }, fields: columns, title: columns.join(', ') };
   }
+  if (draft.kind === 'scatter') {
+    const x = need(draft.x, 'horizontal');
+    const y = need(draft.y, 'vertical');
+    if (types.get(x) !== 'number' || types.get(y) !== 'number') throw new Error('A scatter plot needs two numeric columns.');
+    if (x === y) throw new Error('Choose two different columns.');
+    return { request: { ...base, projection: [x, y], limit: 1000 }, fields: [x, y], title: `${y} vs ${x}` };
+  }
   const measure = draft.op === 'count' ? undefined : need(draft.measure, 'number');
   if (measure && ['sum', 'avg'].includes(draft.op) && types.get(measure) !== 'number') {
     throw new Error(`"${measure}" is not numeric, so it cannot be summed or averaged.`);
@@ -54,12 +66,26 @@ export function planChart(draft: ChartDraft, dataset: Dataset, requestId?: strin
     return { request: { ...base, aggregates: [spec], limit: 1 }, fields: [name], title: measureTitle(draft.op, measure) };
   }
   const dimension = need(draft.dimension, 'category');
+  if (draft.kind === 'heatmap' || draft.kind === 'sankey') {
+    const second = need(draft.dimension2, 'second category');
+    if (second === dimension) throw new Error('Choose two different categories.');
+    const { name, spec } = aggregate([dimension, second]);
+    const sort = draft.kind === 'heatmap'
+      ? [{ field: dimension, direction: 'asc' as const }, { field: second, direction: 'asc' as const }]
+      : [{ field: name, direction: 'desc' as const }];
+    return {
+      request: { ...base, groupBy: [dimension, second], aggregates: [spec], sort, limit: 1000 },
+      fields: [dimension, second, name],
+      title: draft.kind === 'heatmap' ? `${measureTitle(draft.op, measure)} by ${dimension} and ${second}`
+        : `${measureTitle(draft.op, measure)} from ${dimension} to ${second}`,
+    };
+  }
   const { name, spec } = aggregate([dimension]);
-  const sort = draft.kind === 'line'
-    ? [{ field: dimension, direction: 'asc' as const }]
-    : [{ field: name, direction: 'desc' as const }];
+  // Time-like series read left to right; part-of-whole and ranking views lead with the largest value.
+  const ordered = draft.kind === 'line' || draft.kind === 'area';
+  const sort = ordered ? [{ field: dimension, direction: 'asc' as const }] : [{ field: name, direction: 'desc' as const }];
   return {
-    request: { ...base, groupBy: [dimension], aggregates: [spec], sort, limit: draft.kind === 'line' ? 500 : 50 },
+    request: { ...base, groupBy: [dimension], aggregates: [spec], sort, limit: ordered ? 500 : 50 },
     fields: [dimension, name],
     title: `${measureTitle(draft.op, measure)} by ${dimension}`,
   };
