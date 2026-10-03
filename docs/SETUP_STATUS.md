@@ -1,7 +1,7 @@
 # Verified setup — 3 October 2026
 
 - Private repository: https://github.com/RiyadMehdi7/Agens.
-- Write-access invitation sent to `tariel-aliev`; acceptance was pending at setup.
+- `tariel-aliev` has confirmed write access to the repository.
 - Matrix primary computer provisioned; hosted CLI identity, gateway and shell backend verified.
 - Matrix checkout: `/home/matrix/home/projects/agens`, clean `main`, initial commit `f544405`.
 - Remote GitHub authentication confirmed as `RiyadMehdi7`.
