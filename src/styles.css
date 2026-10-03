@@ -43,6 +43,7 @@ button:disabled { cursor: default; }
 .tag { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 6px; background: var(--raised); color: var(--muted); }
 .tag.sample { color: #e7c26a; }
 .tag.warn { color: var(--accent); }
+.tag.sel { color: var(--text); }
 
 /* Grid */
 .grid { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px;
@@ -73,7 +74,8 @@ button:disabled { cursor: default; }
 .swatch { width: 14px; height: 14px; border-radius: 50%; }
 .body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tile footer { position: relative; display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
-.tile footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile footer > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile footer > span:last-child { flex-shrink: 0; white-space: nowrap; }
 .notice { margin: auto; max-width: 320px; text-align: center; font-size: 14px; line-height: 1.5; color: var(--muted); }
 
 /* Charts */
@@ -88,8 +90,10 @@ button:disabled { cursor: default; }
 .bars { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
 .bar-row { display: grid; grid-template-columns: minmax(64px, 30%) minmax(0, 1fr) 56px; gap: 12px; align-items: center; font-size: 13px; }
 .bar-row > span:first-child { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-track { height: 10px; }
-.bar-fill { height: 100%; border-radius: 5px; transform-origin: left; animation: slide 1s cubic-bezier(.2,.8,.2,1) both; }
+.bar-track { position: relative; height: 10px; }
+.bar-zero { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--line-strong); }
+.bar-fill.negative { transform-origin: right; }
+.bar-fill { position: absolute; top: 0; height: 100%; border-radius: 5px; transform-origin: left; animation: slide 1s cubic-bezier(.2,.8,.2,1) both; }
 .bar-row > span:last-child { text-align: right; font-family: var(--mono); }
 .table-wrap { flex: 1; min-height: 0; overflow: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }

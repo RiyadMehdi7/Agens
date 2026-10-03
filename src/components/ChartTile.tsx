@@ -59,7 +59,9 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
         <span title={result?.aggregation}>{result ? `${result.aggregation} · ${formatTime(result.capturedAt)}` : chart.queryId}</span>
         <span>
           {result?.truncated && <span className="tag warn" title="The query limit cut off some rows">truncated</span>}{' '}
-          {selected ? 'this chart' : freshness ?? ''}
+          {/* Provenance always stays visible; selection is shown alongside it, never instead. */}
+          {selected && <span className="tag sel">this chart</span>}{' '}
+          {freshness ?? ''}
         </span>
       </footer>
     </section>

@@ -1,5 +1,6 @@
 import { useState, type PointerEvent } from 'react';
 import { formatCell, formatNumber } from '../canvas/format.js';
+import { barSpans } from '../canvas/geometry.js';
 import type { RenderData } from '../canvas/registry.js';
 
 type Series = Extract<RenderData, { kind: 'line' | 'bar' }>;
@@ -69,19 +70,26 @@ function LineView({ data, color, title }: { data: Series; color: string; title: 
 }
 
 function BarView({ data, color }: { data: Series; color: string }) {
-  const max = Math.max(0, ...data.points.map(p => p.y ?? 0)) || 1;
+  const { spans, zero } = barSpans(data.points.map(p => p.y));
+  const signed = zero > 0;
   return (
     <div className="bars" role="list">
-      {data.points.map((p, i) => (
-        <div className="bar-row" role="listitem" key={i}>
-          <span title={formatCell(p.x)}>{formatCell(p.x)}</span>
-          <div className="bar-track">
-            <div className="bar-fill" style={{ width: `${Math.max(0, ((p.y ?? 0) / max) * 100)}%`, background: color,
-              opacity: 1 - Math.min(i, 5) * 0.12, animationDelay: `${i * 0.06}s` }} />
+      {data.points.map((p, i) => {
+        const span = spans[i];
+        return (
+          <div className="bar-row" role="listitem" key={i}>
+            <span title={formatCell(p.x)}>{formatCell(p.x)}</span>
+            <div className="bar-track">
+              {signed && <span className="bar-zero" style={{ left: `${zero}%` }} aria-hidden="true" />}
+              {span && (
+                <div className={`bar-fill${span.negative ? ' negative' : ''}`} style={{ left: `${span.left}%`, width: `${span.width}%`,
+                  background: color, opacity: (span.negative ? 0.55 : 1) - Math.min(i, 5) * 0.08, animationDelay: `${i * 0.06}s` }} />
+              )}
+            </div>
+            <span>{formatCell(p.y)}</span>
           </div>
-          <span>{formatCell(p.y)}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

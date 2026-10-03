@@ -6,6 +6,7 @@ import { evaluateSample, sampleDataset, sampleRows } from '../src/api/sample.js'
 import { planChart } from '../src/canvas/plan.js';
 import { checkChart, unsupportedKinds } from '../src/canvas/registry.js';
 import { formatCell } from '../src/canvas/format.js';
+import { barSpans } from '../src/canvas/geometry.js';
 
 const run = (input: ReturnType<typeof planChart>['request']): QueryResult =>
   ({ queryId: 'q1', ...evaluateSample(sampleDataset, sampleRows(), validateQueryForDataset(input, sampleDataset)) });
@@ -96,4 +97,21 @@ test('cells format without inventing values', () => {
   assert.equal(formatCell('2026-08-01T00:00:00.000Z'), 'Aug 26');
   assert.equal(formatCell(1234.5, false), '1,234.5');
   assert.equal(formatCell(1_553_000), '1.6M');
+});
+
+test('bars use a signed scale with a shared zero baseline', () => {
+  const positive = barSpans([10, 5, null]);
+  assert.equal(positive.zero, 0);
+  assert.deepEqual(positive.spans[0], { left: 0, width: 100, negative: false });
+  assert.equal(positive.spans[1]?.width, 50);
+  assert.equal(positive.spans[2], null);
+  const negative = barSpans([-4, -2]);
+  assert.equal(negative.zero, 100);
+  assert.deepEqual(negative.spans[0], { left: 0, width: 100, negative: true });
+  assert.deepEqual(negative.spans[1], { left: 50, width: 50, negative: true });
+  const mixed = barSpans([-25, 75]);
+  assert.equal(mixed.zero, 25);
+  assert.deepEqual(mixed.spans[0], { left: 0, width: 25, negative: true });
+  assert.deepEqual(mixed.spans[1], { left: 25, width: 75, negative: false });
+  assert.equal(barSpans([0, 0]).spans[0]?.width, 0);
 });
