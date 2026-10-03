@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useCanvas } from './canvas/useCanvas.js';
 import { AddPanel } from './components/AddPanel.js';
 import { ChartTile, PendingChartTile } from './components/ChartTile.js';
-import { ApiIcon, DatabaseIcon, MicIcon, PlusIcon, SheetIcon, SparkIcon } from './components/icons.js';
-import { DatasetSummary, FilePicker, SourcesSheet } from './components/SourcesSheet.js';
+import { DatabaseIcon, MicIcon, PlusIcon } from './components/icons.js';
+import { DatasetSummary, SourcesPanel, SourceTiles } from './components/SourcesSheet.js';
 
 export function App() {
   const canvas = useCanvas();
@@ -20,26 +20,8 @@ export function App() {
         onKeyDown={e => { if (e.key === 'Escape' && dashboard.selectedChartId) canvas.select(null); }}>
         {!activeDataset && !canvas.importing && (
           <div className="center">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <h1 className="hero">What do you want to see?</h1>
-              <p className="sub">Connect a source, then build your dashboard.</p>
-            </div>
-            <div className="sources">
-              <FilePicker canvas={canvas} className="source">
-                <SheetIcon color="#3DD6A3" /><strong>Excel or CSV</strong><span>Upload a workbook</span>
-              </FilePicker>
-              <button className="source" onClick={() => setSheetOpen(true)}>
-                <DatabaseIcon color="#5B8CFF" size={22} /><strong>Database</strong><span>Read-only Postgres · not yet</span>
-              </button>
-              <button className="source" onClick={() => setSheetOpen(true)}>
-                <ApiIcon color="#E7C26A" /><strong>API</strong><span>HTTPS JSON · not yet</span>
-              </button>
-              {(canvas.serverData === 'unavailable' || canvas.serverData === 'unreachable') && (
-                <button className="source" onClick={() => void canvas.loadSample()}>
-                  <SparkIcon color="#C77DFF" /><strong>Sample data</strong><span>Synthetic revenue, labelled</span>
-                </button>
-              )}
-            </div>
+            <h1 className="hero">What do you want to see?</h1>
+            <SourceTiles canvas={canvas} />
           </div>
         )}
 
@@ -81,14 +63,18 @@ export function App() {
       </main>
 
       <div className="dock-area">
-        <p className={`status${canvas.status?.tone === 'error' ? ' error' : ''}`} role="status" aria-live="polite">
+        <p className={`status${canvas.status?.tone === 'error' ? ' error' : ''}`} role="status" aria-live="polite"
+          style={{ opacity: sheetOpen || addOpen ? 0 : 1 }}>
           {canvas.status?.text ?? ''}
         </p>
         <div className="dock">
-          <button className="round" onClick={() => { setAddOpen(false); setSheetOpen(true); }} aria-label="Data sources">
-            <DatabaseIcon />
-            <span className="dot" style={{ background: activeDataset ? 'var(--ok)' : '#4A4E58' }} />
-          </button>
+          <div style={{ position: 'relative' }}>
+            {sheetOpen && <SourcesPanel canvas={canvas} onClose={() => setSheetOpen(false)} />}
+            <button className="round" onClick={() => { setAddOpen(false); setSheetOpen(o => !o); }} aria-label="Data sources" aria-expanded={sheetOpen}>
+              <DatabaseIcon />
+              <span className="dot" style={{ background: activeDataset ? 'var(--ok)' : '#4A4E58' }} />
+            </button>
+          </div>
           <div style={{ position: 'relative' }}>
             {busy && <span className="spin-ring" aria-hidden="true" />}
             {/* Voice lands with issue #4; until then the control states that it is unavailable. */}
@@ -99,12 +85,11 @@ export function App() {
           </div>
           <div style={{ position: 'relative' }}>
             {addOpen && <AddPanel canvas={canvas} onClose={() => setAddOpen(false)} />}
-            <button className="round" onClick={() => setAddOpen(o => !o)} aria-label="Add a chart" aria-expanded={addOpen}><PlusIcon /></button>
+            <button className="round" onClick={() => { setSheetOpen(false); setAddOpen(o => !o); }} aria-label="Add a chart" aria-expanded={addOpen}><PlusIcon /></button>
           </div>
         </div>
       </div>
 
-      {sheetOpen && <SourcesSheet canvas={canvas} onClose={() => setSheetOpen(false)} />}
     </div>
   );
 }

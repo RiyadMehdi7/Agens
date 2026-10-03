@@ -36,7 +36,7 @@ sources (left), microphone (centre), add chart (right). Nothing else is on scree
 | `src/canvas/plan.ts` | Turns a manual chart request into a bounded declarative `QueryRequest` (no SQL or JS). Voice planning should produce the same shape. |
 | `src/canvas/registry.ts` | Renderer registry: `line`, `bar`, `table`, `metric`. Each renderer validates the actual `QueryResult` rows and `chart.fields` before drawing, and returns a readable reason when they do not fit. Other shared kinds (`area`, `scatter`, `pie`, `heatmap`, `treemap`, `sankey`) are listed as “not available yet”. |
 | `src/canvas/useCanvas.ts` | Canvas state. `dispatch()` is the single entry point for dashboard changes and always goes through the shared `applyDashboardAction` with the current revision. Colour and size are client-side presentation only and never touch the shared dashboard or evidence. |
-| `src/components/*` | Tiles, renderers, sources sheet and add panel. |
+| `src/components/*` | Chart tiles and renderers, the icon-first sources popover (also used on the empty canvas) and the add panel. |
 
 ### Contract usage and invariants
 
@@ -47,7 +47,7 @@ sources (left), microphone (centre), add chart (right). Nothing else is on scree
 - Reorder sends the complete chart ID list. Remove clears selection through the reducer.
   Selection is the reducer's `selectedChartId`, which is how “this chart” will resolve for voice.
 - Tile footers show the evidence: aggregation, capture time, truncation and freshness.
-- Workbook sheet discovery is not in the contract yet, so the sources sheet takes an optional sheet name.
+- Workbook sheet discovery is not in the contract yet, so the sources popover has an optional sheet-name control (layers icon).
 - After a reload the canvas lists the session's datasets again. Charts are client state and are not restored.
 
 ## States covered

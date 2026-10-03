@@ -26,3 +26,9 @@ export const ArrowIcon = ({ dir }: { dir: 'left' | 'right' }) => (
     {dir === 'left' ? <path d="M15 6l-6 6 6 6" /> : <path d="M9 6l6 6-6 6" />}
   </svg>
 );
+export const UploadIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" /><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></svg>
+);
+export const LayersIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M12 3 3 8l9 5 9-5z" /><path d="m3 13 9 5 9-5" /></svg>
+);
