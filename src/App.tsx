@@ -42,7 +42,8 @@ export function App() {
             <div className="card">
               <div className="row">
                 <span style={{ fontSize: 17 }}>{activeDataset.name}</span>
-                <span className="state on">{activeDataset.freshness === 'sample' ? 'Sample data' : 'Connected'}</span>
+                <span className="ds-dot on" title={activeDataset.freshness === 'sample' ? 'Synthetic sample data' : 'Connected'}
+                  aria-label={activeDataset.freshness === 'sample' ? 'Synthetic sample data' : 'Connected'} />
               </div>
               <DatasetSummary dataset={activeDataset} />
             </div>

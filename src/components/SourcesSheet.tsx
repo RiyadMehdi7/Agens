@@ -18,13 +18,15 @@ export function DatasetSummary({ dataset }: { dataset: Dataset }) {
   );
 }
 
-function Tile({ label, title, color, onClick, disabled, busy, children }:
-  { label: string; title: string; color: string; onClick?: () => void; disabled?: boolean; busy?: boolean; children: ReactNode }) {
+function Tile({ label, title, color, onClick, disabled, busy, index, children }:
+  { label: string; title: string; color: string; onClick?: () => void; disabled?: boolean; busy?: boolean; index: number; children: ReactNode }) {
   return (
-    <button className={`src-tile${busy ? ' busy' : ''}`} onClick={onClick} disabled={disabled} title={title}
-      aria-label={title} style={{ ['--tint' as string]: color }}>
-      {busy && <span className="orb" style={{ background: color }} aria-hidden="true" />}
-      <span className={`src-icon${busy ? ' fog' : ''}`}>{children}</span>
+    <button className={`src-tile${busy ? ' busy' : ''}`} onClick={onClick} disabled={disabled} title={title} aria-label={title}
+      style={{ ['--tint' as string]: color, animationDelay: `${index * 0.05}s` }}>
+      <span className="src-circle">
+        {busy && <span className="spin-ring" aria-hidden="true" />}
+        <span className={busy ? 'fog' : undefined} style={{ display: 'flex' }}>{children}</span>
+      </span>
       <span className="src-label">{label}</span>
     </button>
   );
@@ -49,13 +51,13 @@ export function SourceTiles({ canvas, onPicked, sheetPicker = false }: { canvas:
         onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; take(file); }} />
       <div className="src-tiles">
         <Tile label={over ? 'Drop' : 'File'} title="Upload or drop an .xlsx or .csv file (up to 256 KB)" color="#3DD6A3"
-          busy={!!canvas.importing} disabled={!!canvas.importing} onClick={() => input.current?.click()}>
+          index={0} busy={!!canvas.importing} disabled={!!canvas.importing} onClick={() => input.current?.click()}>
           <UploadIcon />
         </Tile>
-        <Tile label="Postgres" title="Read-only Postgres — coming soon" color="#5B8CFF" disabled><DatabaseIcon size={22} /></Tile>
-        <Tile label="API" title="HTTPS JSON API — coming soon" color="#E7C26A" disabled><ApiIcon /></Tile>
+        <Tile label="Postgres" title="Read-only Postgres · coming soon" color="#5B8CFF" index={1} disabled><DatabaseIcon size={22} /></Tile>
+        <Tile label="API" title="HTTPS JSON API · coming soon" color="#E7C26A" index={2} disabled><ApiIcon /></Tile>
         {noServerData && (
-          <Tile label="Sample" title="Synthetic sample data (this server has no data engine)" color="#C77DFF"
+          <Tile label="Sample" title="Synthetic sample data (this server has no data engine)" color="#C77DFF" index={3}
             onClick={() => { void canvas.loadSample(); onPicked?.(); }}>
             <SparkIcon />
           </Tile>
@@ -78,11 +80,12 @@ export function SourceTiles({ canvas, onPicked, sheetPicker = false }: { canvas:
 /** Popover above the sources button: connected datasets plus the same tiles. */
 export function SourcesPanel({ canvas, onClose }: { canvas: CanvasState; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
-  useEffect(() => { panel.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); }, []);
+  // Focus the panel itself so keyboard users land inside without a ring on the first row.
+  useEffect(() => { panel.current?.focus(); }, []);
   return (
     <>
       <div className="scrim" onClick={onClose} aria-hidden="true" />
-      <div ref={panel} className="popover src-pop" role="dialog" aria-label="Sources"
+      <div ref={panel} className="popover src-pop" role="dialog" aria-label="Sources" tabIndex={-1}
         onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>
         {canvas.datasets.length > 0 && (
           <ul className="ds-list" aria-label="Connected">
