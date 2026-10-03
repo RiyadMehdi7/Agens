@@ -60,7 +60,7 @@ export function App() {
             <div className="card">
               <div className="row">
                 <span style={{ fontSize: 17 }}>{activeDataset.name}</span>
-                <span className={`tag${activeDataset.freshness === 'sample' ? ' sample' : ''}`}>{activeDataset.freshness === 'sample' ? 'sample data' : 'connected'}</span>
+                <span className="state on">{activeDataset.freshness === 'sample' ? 'Sample data' : 'Connected'}</span>
               </div>
               <DatasetSummary dataset={activeDataset} />
             </div>
