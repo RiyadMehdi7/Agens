@@ -14,7 +14,10 @@
     "verify:gemini": "tsx --env-file-if-exists=.env.local scripts/verify-gemini.ts",
     "setup:matrix": "bash scripts/matrix-bootstrap.sh",
     "dev:web": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node --env-file-if-exists=.env.local dist/server/index.js",
+    "demo": "npm run build && npm start",
+    "smoke:demo": "tsx scripts/demo-smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.27.0",
