@@ -1,0 +1,26 @@
+{
+  "name": "agens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx --env-file-if-exists=.env.local server/index.ts",
+    "check": "tsc --noEmit",
+    "build": "tsc",
+    "test": "tsx --test tests/*.test.ts",
+    "verify:gemini": "tsx --env-file-if-exists=.env.local scripts/verify-gemini.ts",
+    "setup:matrix": "bash scripts/matrix-bootstrap.sh"
+  },
+  "dependencies": {
+    "@google/genai": "^2.27.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
