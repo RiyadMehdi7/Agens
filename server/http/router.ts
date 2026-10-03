@@ -91,15 +91,15 @@ export function createApiServer(options: HttpOptions) {
           case '/api/datasets/inspect': result=await service.inspect(session.id,body);break;
           case '/api/sources/connect': result=await service.connect(session.id,body);status=201;break;
           case '/api/query': result = await service.query(session.id, body); break;
-          case '/api/live/token': liveTokenRequestSchema.parse(body); service.live(session.id); break;
-          case '/api/dashboard/plan': service.plan(session.id, body); break;
+          case '/api/live/token': liveTokenRequestSchema.parse(body); result = await service.live(session.id); break;
+          case '/api/dashboard/plan': result = await service.plan(session.id, body); break;
           case '/api/tools/execute': {
             const tool = toolRequestSchema.parse(body);
             switch (tool.name) {
               case 'list_datasets': result = service.list(session.id); break;
               case 'query_data': result = await service.query(session.id, tool.arguments); break;
               case 'get_query': result = service.evidence(session.id, tool.arguments.queryId, tool.arguments.datasetId); break;
-              case 'plan_dashboard': service.plan(session.id, tool.arguments); break;
+              case 'plan_dashboard': result = await service.plan(session.id, tool.arguments); break;
             }
             break;
           }
