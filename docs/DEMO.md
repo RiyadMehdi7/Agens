@@ -17,17 +17,31 @@ The server reads `GEMINI_API_KEY` from the environment or the private `.env.loca
 data features work and voice reports "not configured". `AGENS_SOURCES_FILE` optionally points at the private
 connector config (see DATA_RUNTIME.md). Neither file is ever committed or sent to the browser.
 
-## On Matrix
+## Postgres and API connectors (local)
 
-1. In the Matrix checkout (`/home/matrix/home/projects/agens`): `git pull`, `npm ci`, `npm run check`, `npm test`.
-2. Start the app in a persistent Matrix terminal: `npm run demo`. Leave it running. To restart, run the same command again.
-3. On the laptop, forward the port: `matrix port forward 5190`, then open http://127.0.0.1:5190 in Chrome.
-   Loopback counts as a secure context, so the microphone works. Use a headset to avoid echo.
-4. In a second Matrix terminal: `npm run smoke:demo`. With the team key this issues a real Live token and runs a
-   real Gemini 3.8 Flash plan. Paste its JSON (it contains no secrets) into the issue as evidence.
+```sh
+bash scripts/local-postgres.sh
+AGENS_SOURCES_FILE=$HOME/.agens/sources.json npm run demo
+```
 
-If the Matrix terminal drops, reattach with `matrix shell connect --profile cloud --project main --tab <tab>`
-(SETUP_STATUS.md lists the tab). The server holds no durable state: a restart clears sessions, so re-upload.
+The script starts a disposable `agens-postgres` container on `127.0.0.1:55432` with 108 synthetic rows in
+`analytics.revenue` (month, region, channel, revenue, accounts) and a SELECT-only `agens_reader` role. It writes the
+private connector config and access tokens to `~/.agens` (mode 0600) and never prints secrets. In the canvas:
+
+| Tile | Source ID | Access token |
+| --- | --- | --- |
+| Postgres | `revenue_db` | `revenue_db` line of `~/.agens/access-tokens.txt` |
+| API | `posts_api` | `posts_api` line of the same file (public synthetic JSONPlaceholder posts) |
+
+Copy a token: `awk '$1=="revenue_db"{printf "%s", $2}' ~/.agens/access-tokens.txt | pbcopy`.
+Expected Postgres totals by region: North America 1,681,684; Europe 1,379,840; APAC 840,844; LATAM 409,644.
+Remove it with `docker rm -f agens-postgres && rm -rf ~/.agens`.
+
+## Matrix
+
+Matrix OS was the team's development computer. The app is not run there: Matrix app windows are sandboxed iframes
+without microphone access, the app proxy strips cookies and cuts requests at 30 s, and port forwarding returned
+empty responses during testing (3 October 2026).
 
 ## Demo script
 
@@ -43,12 +57,12 @@ If the Matrix terminal drops, reattach with `matrix shell connect --profile clou
 
 | #6 criterion | Status |
 | --- | --- |
-| Combined frontend/backend with documented start command | Done: `npm run demo` serves both on one loopback port; Matrix preview by `matrix port forward 5190`. Not yet run on Matrix. |
+| Combined frontend/backend with documented start command | Done: `npm run demo` serves both on one loopback port. Run locally; running on Matrix was dropped (see above). |
 | Upload → speak → interrupt → change type → reorder/remove → ask about a trend | Manual and tool paths are implemented and tested locally. **Spoken run not done**: no key on the laptop. |
 | Values match known totals; type/filter changes keep evidence; stale work never overwrites | Totals checked by `smoke:demo` and the tests. Type change keeps the query. Cancelled or stale plans are discarded (tested). |
 | Mic denial, reconnect, no data, malformed workbook, model/quota failure, ambiguous references | Mic denial, no data, malformed files, model failure and ambiguity are handled and tested. Model failure was also seen in the browser with an invalid key. Reconnect is implemented but untested against the live service. |
 | Interview one real user | **Not done.** Product fit remains a hypothesis. |
-| Screenshots, reproducible steps, real-provider results, known limits | Steps above; `smoke:demo` produces provider evidence on Matrix. Screenshots and provider results are still to attach. |
+| Screenshots, reproducible steps, real-provider results, known limits | Steps above; `smoke:demo` with the team key produces provider evidence. Screenshots and provider results are still to attach. |
 | README and health reflect real capabilities | Updated. Health says voice is `configured`, not verified. |
 
 ## Known limits
