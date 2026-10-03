@@ -1,0 +1,101 @@
+import { useState } from 'react';
+import { useCanvas } from './canvas/useCanvas.js';
+import { AddPanel } from './components/AddPanel.js';
+import { ChartTile, PendingChartTile } from './components/ChartTile.js';
+import { DatabaseIcon, MicIcon, PlusIcon } from './components/icons.js';
+import { DatasetSummary, SourcesPanel, SourceTiles } from './components/SourcesSheet.js';
+
+export function App() {
+  const canvas = useCanvas();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const { dashboard, activeDataset, pending } = canvas;
+  const hasTiles = dashboard.charts.length > 0 || pending.length > 0;
+  const busy = pending.length > 0 || !!canvas.importing;
+  const onboarding = !activeDataset;
+  const freshness = new Map(canvas.datasets.map(d => [d.id, d.freshness]));
+
+  return (
+    <div className="app">
+      <main className="stage" aria-label="Canvas"
+        onKeyDown={e => { if (e.key === 'Escape' && dashboard.selectedChartId) canvas.select(null); }}>
+        {!activeDataset && !canvas.importing && (
+          <div className="center">
+            <h1 className="hero">What do you want to see?</h1>
+            <SourceTiles canvas={canvas} />
+          </div>
+        )}
+
+        {canvas.importing && !activeDataset && (
+          <div className="center">
+            <div className="card" style={{ position: 'relative', overflow: 'hidden' }} aria-busy="true">
+              <div className="orb" style={{ background: '#3DD6A3' }} />
+              <div className="fog" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontSize: 17 }}>{canvas.importing}</span>
+                <div className="chips">{[80, 64, 96, 72].map((w, i) => <span key={i} className="chip" style={{ width: w, height: 24 }} />)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeDataset && !hasTiles && (
+          <div className="center">
+            <div className="card">
+              <div className="row">
+                <span style={{ fontSize: 17 }}>{activeDataset.name}</span>
+                <span className="ds-dot on" title={activeDataset.freshness === 'sample' ? 'Synthetic sample data' : 'Connected'}
+                  aria-label={activeDataset.freshness === 'sample' ? 'Synthetic sample data' : 'Connected'} />
+              </div>
+              <DatasetSummary dataset={activeDataset} />
+            </div>
+            <p className="hero" style={{ color: 'var(--muted)', fontSize: 'clamp(20px, 2.4vw, 28px)' }}>Tap + to add a chart.</p>
+          </div>
+        )}
+
+        {hasTiles && (
+          <div className="grid">
+            {dashboard.charts.map((chart, i) => (
+              <ChartTile key={chart.id} chart={chart} result={canvas.results[chart.queryId]}
+                layout={canvas.layout[chart.id] ?? { size: 1, color: 0 }} selected={dashboard.selectedChartId === chart.id}
+                index={i} count={dashboard.charts.length} freshness={freshness.get(chart.datasetId)} canvas={canvas} />
+            ))}
+            {pending.map(tile => <PendingChartTile key={tile.key} tile={tile} />)}
+          </div>
+        )}
+      </main>
+
+      <div className="dock-area">
+        <p className={`status${canvas.status?.tone === 'error' ? ' error' : ''}`} role="status" aria-live="polite"
+          style={{ opacity: sheetOpen || addOpen ? 0 : 1 }}>
+          {canvas.status?.text ?? ''}
+          {canvas.status?.action && (
+            <button className="status-action" onClick={canvas.status.action.run}>{canvas.status.action.label}</button>
+          )}
+        </p>
+        <div className="dock">
+          {/* Until data is connected the canvas itself offers the sources, so the dock is just the mic. */}
+          {!onboarding && <div className="dock-side" style={{ position: 'relative' }}>
+            {sheetOpen && <SourcesPanel canvas={canvas} onClose={() => setSheetOpen(false)} />}
+            <button className="round" onClick={() => { setAddOpen(false); setSheetOpen(o => !o); }} aria-label="Data sources" aria-expanded={sheetOpen}>
+              <DatabaseIcon />
+              <span className="dot" style={{ background: activeDataset ? 'var(--ok)' : '#4A4E58' }} />
+            </button>
+          </div>}
+          <div style={{ position: 'relative' }}>
+            {busy && <span className="spin-ring" aria-hidden="true" />}
+            {/* Voice lands with issue #4; until then the control states that it is unavailable. */}
+            <button className="mic" aria-disabled="true" aria-label="Voice, not connected yet"
+              onClick={() => canvas.setStatus({ text: 'Voice is not connected yet. Use + to add charts for now.', tone: 'info' })}>
+              <MicIcon />
+            </button>
+          </div>
+          {!onboarding && <div className="dock-side" style={{ position: 'relative' }}>
+            {addOpen && <AddPanel canvas={canvas} onClose={() => setAddOpen(false)} />}
+            <button className="round" onClick={() => { setSheetOpen(false); setAddOpen(o => !o); }} aria-label="Add a chart" aria-expanded={addOpen}><PlusIcon /></button>
+          </div>}
+        </div>
+      </div>
+
+    </div>
+  );
+}
