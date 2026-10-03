@@ -20,6 +20,7 @@ export function App() {
   const hasTiles = dashboard.charts.length > 0 || pending.length > 0;
   const busy = pending.length > 0 || !!canvas.importing;
   const voiceProblem = voice.state === 'denied' || voice.state === 'error';
+  const onboarding = !activeDataset;
   const freshness = new Map(canvas.datasets.map(d => [d.id, d.freshness]));
 
   return (
@@ -87,13 +88,14 @@ export function App() {
           </p>
         )}
         <div className="dock">
-          <div style={{ position: 'relative' }}>
+          {/* Until data is connected the canvas itself offers the sources, so the dock is just the mic. */}
+          {!onboarding && <div className="dock-side" style={{ position: 'relative' }}>
             {sheetOpen && <SourcesPanel canvas={canvas} onClose={() => setSheetOpen(false)} />}
             <button className="round" onClick={() => { setAddOpen(false); setSheetOpen(o => !o); }} aria-label="Data sources" aria-expanded={sheetOpen}>
               <DatabaseIcon />
               <span className="dot" style={{ background: activeDataset ? 'var(--ok)' : '#4A4E58' }} />
             </button>
-          </div>
+          </div>}
           <div className={`mic-wrap ${voice.state}`} style={{ ['--level' as string]: voice.level.toFixed(2) }}>
             {(voice.state === 'listening' || voice.state === 'speaking') && (
               <><span className="ring" aria-hidden="true" /><span className="ring r2" aria-hidden="true" /><span className="ring r3" aria-hidden="true" /></>
@@ -111,10 +113,10 @@ export function App() {
               </button>
             )}
           </div>
-          <div style={{ position: 'relative' }}>
+          {!onboarding && <div className="dock-side" style={{ position: 'relative' }}>
             {addOpen && <AddPanel canvas={canvas} onClose={() => setAddOpen(false)} />}
             <button className="round" onClick={() => { setSheetOpen(false); setAddOpen(o => !o); }} aria-label="Add a chart" aria-expanded={addOpen}><PlusIcon /></button>
-          </div>
+          </div>}
         </div>
       </div>
 
