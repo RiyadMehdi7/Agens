@@ -18,7 +18,7 @@ const defaultSize: Record<Chart['kind'], number> = { metric: 0, line: 2, bar: 1,
 /** Presentation only. Never part of the shared dashboard, so it cannot affect evidence. */
 export interface TileLayout { size: number; color: number }
 export interface PendingTile { key: string; title: string; kind: Chart['kind']; size: number; color: number }
-export interface Status { text: string; tone: 'info' | 'error' }
+export interface Status { text: string; tone: 'info' | 'error'; action?: { label: string; run: () => void } }
 export type ServerData = 'checking' | 'available' | 'unavailable' | 'unreachable';
 
 /** Dashboard actions without expectedRevision; dispatch supplies the current one. */
@@ -48,6 +48,8 @@ export function useCanvas() {
   const [importing, setImporting] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const dashboardRef = useRef(dashboard);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   const apiRef = useRef<AgensApi>(api);
   apiRef.current = api;
   const generation = useRef(0);
@@ -154,7 +156,24 @@ export function useCanvas() {
 
   const controls = useMemo(() => ({
     select: (chartId: string | null) => dispatch({ type: 'select', chartId }),
-    remove: (chartId: string) => dispatch({ type: 'remove', chartId }),
+    /** Close a chart, offering Undo. Its evidence stays cached, so undo re-adds the same query. */
+    remove: (chartId: string) => {
+      const charts = dashboardRef.current.charts;
+      const index = charts.findIndex(c => c.id === chartId);
+      const chart = charts[index];
+      if (!chart) return;
+      const saved = layoutRef.current[chartId];
+      if (!dispatch({ type: 'remove', chartId })) return;
+      setStatus({ text: `Closed “${chart.title}”`, tone: 'info', action: { label: 'Undo', run: () => {
+        if (dashboardRef.current.charts.some(c => c.id === chart.id)) return;
+        if (!dispatch({ type: 'add', chart })) return;
+        const ids = dashboardRef.current.charts.map(c => c.id).filter(id => id !== chart.id);
+        ids.splice(Math.min(index, ids.length), 0, chart.id);
+        dispatch({ type: 'reorder', chartIds: ids });
+        if (saved) setLayout(l => ({ ...l, [chart.id]: saved }));
+        setStatus(null);
+      } } });
+    },
     /** Type changes keep the same query and fields; the renderer says if they do not fit. */
     changeKind: (chartId: string, kind: Chart['kind']) => dispatch({ type: 'update', chartId, patch: { kind } }),
     rename: (chartId: string, title: string) => title.trim() && dispatch({ type: 'update', chartId, patch: { title: title.trim().slice(0, 200) } }),

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Chart } from '../../shared/dashboard.js';
 import type { QueryResult } from '../../shared/data.js';
 import { formatTime } from '../canvas/format.js';
@@ -21,10 +22,17 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
   const size = sizes[layout.size] ?? sizes[1];
   const color = palette[layout.color] ?? palette[0];
   const check = result ? checkChart(chart, result) : { ok: false as const, reason: 'This chart’s query evidence is missing.' };
+  const [closing, setClosing] = useState(false);
+  // Let the blur-out play before the reducer removes the chart.
+  const close = () => { if (closing) return; setClosing(true); setTimeout(() => canvas.remove(chart.id), 260); };
   const kinds = supportedKinds.some(k => k.kind === chart.kind) ? supportedKinds : [...supportedKinds, { kind: chart.kind, label: kindLabel(chart.kind) }];
   return (
-    <section className={`tile${selected ? ' selected' : ''}`} style={{ gridColumn: `span ${size.span}`, height: size.height }}
-      aria-label={chart.title}>
+    <section className={`tile${selected ? ' selected' : ''}${closing ? ' closing' : ''}`} style={{ gridColumn: `span ${size.span}`, height: size.height }}
+      aria-label={chart.title}
+      onKeyDown={e => {
+        const tag = (e.target as HTMLElement).tagName;
+        if ((e.key === 'Delete' || e.key === 'Backspace') && tag !== 'SELECT' && tag !== 'INPUT') { e.preventDefault(); close(); }
+      }}>
       <header>
         <button className="tile-title" onClick={() => canvas.select(selected ? null : chart.id)} aria-pressed={selected}
           title={selected ? 'Selected. Click to clear.' : 'Select this chart'}>{chart.title}</button>
@@ -38,8 +46,8 @@ export function ChartTile({ chart, result, layout, selected, index, count, fresh
           <button className="ib" onClick={() => canvas.resize(chart.id)} aria-label={`Resize, currently ${size.label}`}>{size.label}</button>
           <button className="ib" onClick={() => canvas.move(chart.id, -1)} disabled={index === 0} aria-label="Move earlier"><ArrowIcon dir="left" /></button>
           <button className="ib" onClick={() => canvas.move(chart.id, 1)} disabled={index === count - 1} aria-label="Move later"><ArrowIcon dir="right" /></button>
-          <button className="ib" onClick={() => canvas.remove(chart.id)} aria-label={`Remove ${chart.title}`}><CloseIcon /></button>
         </div>
+        <button className="tile-close" onClick={close} aria-label={`Close ${chart.title}`} title="Close (Delete)"><CloseIcon size={14} /></button>
       </header>
       {/* Keyed by kind so a type change replays the reveal. */}
       <div className="body reveal" key={chart.kind}>

@@ -67,6 +67,9 @@ export function App() {
         <p className={`status${canvas.status?.tone === 'error' ? ' error' : ''}`} role="status" aria-live="polite"
           style={{ opacity: sheetOpen || addOpen ? 0 : 1 }}>
           {canvas.status?.text ?? ''}
+          {canvas.status?.action && (
+            <button className="status-action" onClick={canvas.status.action.run}>{canvas.status.action.label}</button>
+          )}
         </p>
         <div className="dock">
           <div style={{ position: 'relative' }}>
