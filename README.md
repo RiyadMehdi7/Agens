@@ -6,13 +6,17 @@ ask about a selected chart, compare periods, and explain trends from actual quer
 
 ## Current status
 
-The backend now starts with bounded Excel/CSV ingestion, deterministic analytics queries,
-session-owned immutable evidence, worksheet discovery, and owner-configured read-only Postgres
-and HTTPS JSON connectors. Uploads work without connector configuration. See
-[data setup and verification](docs/DATA_RUNTIME.md) for connection setup and a repeatable smoke check.
-Frontend, live audio and renderer work remain separate tracks; this is not yet a complete voice dashboard.
+Implemented and tested locally; the full spoken demo still has to be proven on Matrix with the team key:
 
-## Local validation
+- **Canvas** (`src/**`): minimal voice-first dashboard with ten validated chart types, drag-and-drop uploads,
+  sheet picking, Postgres/API connect and refresh, add/change/resize/recolor/reorder/close with undo.
+  See [frontend](docs/FRONTEND.md).
+- **Data** (`server/data/**`): bounded Excel/CSV ingestion, deterministic queries, immutable evidence and
+  owner-configured read-only Postgres and HTTPS connectors. See [data runtime](docs/DATA_RUNTIME.md).
+- **Voice** (`src/voice/**`, `server/voice/**`): Gemini 3.8 Live through single-use ephemeral tokens,
+  non-blocking tools, and asynchronous Gemini 3.8 Flash planning validated against real schemas. See [voice](docs/VOICE.md).
+
+## Run it
 
 Use Node 22 or later.
 
@@ -20,15 +24,17 @@ Use Node 22 or later.
 npm ci
 npm run check
 npm test
-npm run build
-npm run dev
+npm run demo        # builds and serves API + canvas on http://127.0.0.1:5190
+npm run smoke:demo  # end-to-end check of the running app (another terminal)
 ```
 
-Health: http://127.0.0.1:5190/api/health. The foundation binds only to loopback.
-Copy `.env.example` to `.env.local` if testing Gemini metadata and enter the key privately.
-`npm run verify:gemini` checks model access, without generating audio or dashboards.
+For development with hot reload run `APP_ORIGIN=http://127.0.0.1:5173 npm run dev` and `npm run dev:web`.
+Put `GEMINI_API_KEY` in a private `.env.local` (never with a `VITE_` prefix) to enable voice.
+`npm run verify:gemini` checks model access. [Demo runbook and acceptance status](docs/DEMO.md).
 
 ## Matrix setup
+
+Preview on Matrix with `npm run demo` there and `matrix port forward 5190` locally (see docs/DEMO.md).
 
 See [docs/MATRIX_SETUP.md](docs/MATRIX_SETUP.md). This checkout must be cloned and verified on the
 Matrix computer. A local setup or successful push does not satisfy that requirement.

@@ -3,11 +3,14 @@ import { ZodError } from 'zod';
 import { idSchema } from '../../shared/data.js';
 import { liveTokenRequestSchema, toolRequestSchema } from '../../shared/api.js';
 import { ApiError, ApiService, type ServiceOptions } from './service.js';
+import { createStaticHandler } from './static.js';
 
 export interface HttpOptions extends ServiceOptions {
   /** Exact browser-facing origin, including the dev port. Do not derive from Host. */
   origin: string;
   maxBodyBytes?: number;
+  /** Built canvas to serve from the same origin (dist/web). Omitted: API only. */
+  staticDir?: string;
 }
 const cookieName = 'agens_session';
 function readCookie(req: IncomingMessage): string | undefined {
@@ -57,6 +60,7 @@ export function createApiServer(options: HttpOptions) {
   const maxBodyBytes = options.maxBodyBytes ?? 512 * 1024;
   if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 512 * 1024) throw new Error('Invalid body limit');
   const service = new ApiService(options);
+  const serveStatic = options.staticDir ? createStaticHandler(options.staticDir) : undefined;
   const server = createServer({ maxHeaderSize: 8192 }, (req, res) => {
     void (async () => {
       try {
@@ -68,6 +72,7 @@ export function createApiServer(options: HttpOptions) {
         const url = new URL(req.url ?? '/', origin);
         if (url.origin !== origin.origin || url.search) throw new ApiError(400, 'INVALID_REQUEST', 'Unexpected URL parameters.');
         if (req.method === 'GET' && url.pathname === '/api/health') { send(res, 200, service.health()); return; }
+        if (serveStatic && await serveStatic(req.method ?? '', url.pathname, res)) return;
         const queryMatch = /^\/api\/queries\/([A-Za-z0-9_-]{1,80})$/.exec(url.pathname);
         const refreshMatch=/^\/api\/datasets\/([A-Za-z0-9_-]{1,80})\/refresh$/.exec(url.pathname);
         const statusMatch=/^\/api\/datasets\/([A-Za-z0-9_-]{1,80})\/status$/.exec(url.pathname);
