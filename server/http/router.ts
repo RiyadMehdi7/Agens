@@ -69,8 +69,10 @@ export function createApiServer(options: HttpOptions) {
         if (url.origin !== origin.origin || url.search) throw new ApiError(400, 'INVALID_REQUEST', 'Unexpected URL parameters.');
         if (req.method === 'GET' && url.pathname === '/api/health') { send(res, 200, service.health()); return; }
         const queryMatch = /^\/api\/queries\/([A-Za-z0-9_-]{1,80})$/.exec(url.pathname);
-        const known = (req.method === 'GET' && (url.pathname === '/api/datasets' || queryMatch)) ||
-          (req.method === 'POST' && ['/api/datasets/import', '/api/query', '/api/live/token', '/api/dashboard/plan', '/api/tools/execute'].includes(url.pathname));
+        const refreshMatch=/^\/api\/datasets\/([A-Za-z0-9_-]{1,80})\/refresh$/.exec(url.pathname);
+        const statusMatch=/^\/api\/datasets\/([A-Za-z0-9_-]{1,80})\/status$/.exec(url.pathname);
+        const known = (req.method === 'GET' && (url.pathname === '/api/datasets' || queryMatch || statusMatch)) ||
+          (req.method === 'POST' && (refreshMatch || ['/api/datasets/import', '/api/datasets/inspect', '/api/sources/connect', '/api/query', '/api/live/token', '/api/dashboard/plan', '/api/tools/execute'].includes(url.pathname)));
         if (!known) throw new ApiError(404, 'NOT_FOUND', 'Route not found.');
         const body = req.method === 'POST' ? await readJson(req, maxBodyBytes) : undefined;
         const session = service.session(readCookie(req));
@@ -78,9 +80,16 @@ export function createApiServer(options: HttpOptions) {
         let result: unknown;
         let status = 200;
         if (queryMatch) result = service.evidence(session.id, idSchema.parse(queryMatch[1]));
+        else if(statusMatch) result=service.sourceStatus(session.id,idSchema.parse(statusMatch[1]));
+        else if(refreshMatch) {
+          if(!body || typeof body!=='object' || Array.isArray(body) || Object.keys(body).length) throw new ApiError(400,'INVALID_REQUEST','Refresh expects an empty object.');
+          result=await service.refresh(session.id,idSchema.parse(refreshMatch[1]));
+        }
         else switch (url.pathname) {
           case '/api/datasets': result = service.list(session.id); break;
           case '/api/datasets/import': result = await service.import(session.id, body); status = 201; break;
+          case '/api/datasets/inspect': result=await service.inspect(session.id,body);break;
+          case '/api/sources/connect': result=await service.connect(session.id,body);status=201;break;
           case '/api/query': result = await service.query(session.id, body); break;
           case '/api/live/token': liveTokenRequestSchema.parse(body); service.live(session.id); break;
           case '/api/dashboard/plan': service.plan(session.id, body); break;

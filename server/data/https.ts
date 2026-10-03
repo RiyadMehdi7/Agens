@@ -35,7 +35,12 @@ async function page(url:URL,headers:Record<string,string>,signal?:AbortSignal):P
   if(!addresses.length || addresses.some(a=>!publicAddress(a.address))) throw new Error('Private target');
   const pinned=addresses[0]!;
   return new Promise((resolve,reject)=> {
-    const req=https.get(url,{headers,signal,timeout:3000,lookup:(_host,_options,callback)=>callback(null,pinned.address,pinned.family)},res=> {
+    const req=https.get(url,{headers,signal,timeout:3000,lookup:(_host,options,callback)=> {
+      // Modern Node asks for all addresses when automatic family selection is enabled.
+      if(typeof options==='object' && options.all) {
+        (callback as unknown as (error:null,addresses:{address:string;family:number}[])=>void)(null,[pinned]);
+      } else callback(null,pinned.address,pinned.family);
+    }},res=> {
       if(res.statusCode!==200 || !/^application\/json(?:;|$)/i.test(res.headers['content-type'] ?? '') || res.headers['content-encoding'] && res.headers['content-encoding']!=='identity') {res.destroy(); reject(new Error('Unsupported API response')); return;}
       let bytes=0; const chunks:Buffer[]=[];
       res.on('data',(chunk:Buffer)=> {bytes+=chunk.length; if(bytes>256*1024) {res.destroy(new Error('Response limit'));} else chunks.push(chunk);});
@@ -75,7 +80,8 @@ export class HttpsJsonAdapter {
       if(url) throw new Error('Pagination bound exceeded');
       const names=[...new Set(all.flatMap(r=>Object.keys(r)))];
       if(names.some(n=>['__proto__','constructor','prototype'].includes(n))) throw new Error('Reserved JSON field');
-      const parsed=table([names,...all.map(r=>names.map(n=>r[n]))]);
+      if(!all.length && !this.dataset) throw new Error('Empty source requires a previously verified schema');
+      const parsed=all.length?table([names,...all.map(r=>names.map(n=>r[n]))]):{columns:structuredClone(this.dataset!.columns),rows:[]};
       const dataset:Dataset={id:this.dataset?.id ?? randomUUID(),sourceId:this.dataset?.sourceId ?? randomUUID(),kind:'api',name:this.#source.name,columns:parsed.columns,rowCount:parsed.rows.length,capturedAt:new Date().toISOString(),freshness:'live'};
       this.dataset=dataset; this.lastError=undefined; return {dataset:structuredClone(dataset),rows:parsed.rows};
     } catch {this.lastError='API refresh failed'; throw new Error(this.lastError);}

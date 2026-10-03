@@ -1,8 +1,9 @@
 # Data adapters — issues #2 and #5
 
 This implementation builds on `codex/1-api-contract` and preserves its shared schemas.
-No frontend, voice, server entrypoint or route composition files are changed. Riyad can inject
-`createWorkbookAdapter` from `server/data/adapter.ts` into `createApiServer({origin,createAdapter})`.
+The original engine PR did not change frontend, voice, entrypoint or routes. The follow-up now
+wires uploads and connectors into server/app.ts and the HTTP runtime; see DATA_RUNTIME.md.
+No frontend or voice code is changed. The original createWorkbookAdapter factory remains available.
 Dependency proposal for review: ExcelJS 4.4 for XLSX, yauzl for bounded archive validation,
 pg 8.16 for Postgres, and their TypeScript types. Package/lockfile changes must be coordinated
 with the integration owner before merging. No contracts are replaced.
@@ -96,9 +97,10 @@ and 4sec operation deadline. No compressed response inflation. Refresh failures 
 error and lastError; listDatasets retains the last successful timestamp. New/unverified sources
 expose no live dataset. This connector is stricter than a general-purpose fetch proxy.
 
-Connector configuration has no public write endpoint in this PR. Integration must expose
-owner-scoped settings and private server storage separately, then register fresh adapters per
-session. Never send pool config or headers to the browser, logs or dataset records.
+Connector configuration has no public credential-write endpoint. The follow-up loads an owner-only
+operator file through SourceRegistry; each source has a hashed owner capability, is claimed by a
+single session and is verified before publication. Never send pool config or headers to the browser,
+logs or dataset records. DATA_RUNTIME.md documents the connection and refresh endpoints.
 
 ## Evidence status
 
@@ -106,7 +108,8 @@ session. Never send pool config or headers to the browser, logs or dataset recor
   ownership tests. Connector transport tests use synthetic mocked DNS/HTTPS/pg, not live providers.
 - Matrix execution: not yet verified in Tariel's Matrix workspace.
 - Real user workbook on Matrix: not yet verified, and must never be committed.
-- Real Postgres/API: unverified; no provider credentials were supplied or read.
+- Real Postgres/API: follow-up verified a real disposable PostgreSQL15 instance and the public
+  JSONPlaceholder API with synthetic data. Owner-specific services remain unverified.
 - Live Gemini voice and dashboard: owned by other tracks, not claimed here.
 
 Issues must remain open until Matrix/provider acceptance is verified. No automatic merge.

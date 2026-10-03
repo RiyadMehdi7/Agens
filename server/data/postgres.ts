@@ -11,7 +11,7 @@ export function compilePostgres(source:PostgresSource,dataset:Dataset,input:unkn
   if(!source.orderBy.length || source.orderBy.some(f=>!source.columns.some(c=>c.name===f))) throw new Error('Stable order columns required');
   const param=(v:unknown)=> {values.push(v); return `$${values.length}`;};
   const predicates=q.filters.map(f=> {
-    const field=identifier(f.field);
+    const field=identifier(f.field)+(source.columns.find(c=>c.name===f.field)?.type==='string'?' COLLATE "C"':'');
     if(f.op==='in') return `(${f.values.map(v=>`${field} IS NOT DISTINCT FROM ${param(v.value)}`).join(' OR ')})`;
     const op={eq:'IS NOT DISTINCT FROM',ne:'IS DISTINCT FROM',gt:'>',gte:'>=',lt:'<',lte:'<='}[f.op];
     return `${field} ${op} ${param(f.value.value)}`;
@@ -56,7 +56,7 @@ export class PostgresAdapter {
         return [c.name,v];
       })) as Row);
       await client.query('COMMIT'); context?.signal.throwIfAborted();
-      const captured={...this.dataset,rowCount:rows.length,capturedAt:new Date().toISOString(),freshness:'live' as const};
+      const captured={...this.dataset,rowCount:compiled.request.filters.length?this.dataset.rowCount:rows.length,capturedAt:new Date().toISOString(),freshness:'live' as const};
       const evidence=evaluate(captured,rows,compiled.request); this.dataset=captured; return evidence;
     } catch { if(!destroy) await client.query('ROLLBACK').catch(()=>{}); throw new Error('Database operation failed'); }
     finally {context?.signal.removeEventListener('abort',abort); if(!destroy) client.release();}
