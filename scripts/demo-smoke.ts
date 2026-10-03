@@ -30,7 +30,8 @@ const report: Record<string, unknown> = { origin };
 // 1. The canvas is served from the same origin.
 const page = await fetch(origin + '/', { signal: AbortSignal.timeout(10_000) });
 const html = await page.text();
-report.canvas = page.ok && html.includes('id="root"') ? 'served' : `missing (HTTP ${page.status}; run npm run build)`;
+check(page.ok && html.includes('id="root"'), `canvas served (HTTP ${page.status}; run npm run build)`);
+report.canvas = 'served';
 
 // 2. Health.
 const health = await call('/api/health');
