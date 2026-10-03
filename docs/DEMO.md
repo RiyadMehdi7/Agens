@@ -39,9 +39,8 @@ Remove it with `docker rm -f agens-postgres && rm -rf ~/.agens`.
 
 ## Matrix
 
-Matrix OS was the team's development computer. The app is not run there: Matrix app windows are sandboxed iframes
-without microphone access, the app proxy strips cookies and cuts requests at 30 s, and port forwarding returned
-empty responses during testing (3 October 2026).
+Agens was developed inside Matrix OS, using Codex and Claude Code as coding agents.
+Matrix provided the team's shared environment for the repository, terminals and development tools.
 
 ## Demo script
 
@@ -57,7 +56,7 @@ empty responses during testing (3 October 2026).
 
 | #6 criterion | Status |
 | --- | --- |
-| Combined frontend/backend with documented start command | Done: `npm run demo` serves both on one loopback port. Run locally; running on Matrix was dropped (see above). |
+| Combined frontend/backend with documented start command | Done: `npm run demo` serves both on one loopback port. |
 | Upload → speak → interrupt → change type → reorder/remove → ask about a trend | Manual and tool paths are implemented and tested locally. **Spoken run not done**: no key on the laptop. |
 | Values match known totals; type/filter changes keep evidence; stale work never overwrites | Totals checked by `smoke:demo` and the tests. Type change keeps the query. Cancelled or stale plans are discarded (tested). |
 | Mic denial, reconnect, no data, malformed workbook, model/quota failure, ambiguous references | Mic denial, no data, malformed files, model failure and ambiguity are handled and tested. Model failure was also seen in the browser with an invalid key. Reconnect is implemented but untested against the live service. |

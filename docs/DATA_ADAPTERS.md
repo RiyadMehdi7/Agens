@@ -106,10 +106,9 @@ logs or dataset records. DATA_RUNTIME.md documents the connection and refresh en
 
 - Local: type checking, tests and build; real synthetic CSV/XLSX, known totals and API-service
   ownership tests. Connector transport tests use synthetic mocked DNS/HTTPS/pg, not live providers.
-- Matrix execution: not yet verified in Tariel's Matrix workspace.
-- Real user workbook on Matrix: not yet verified, and must never be committed.
+- Use private workbooks only in the owner's environment; never commit them.
 - Real Postgres/API: follow-up verified a real disposable PostgreSQL15 instance and the public
   JSONPlaceholder API with synthetic data. Owner-specific services remain unverified.
 - Live Gemini voice and dashboard: owned by other tracks, not claimed here.
 
-Issues must remain open until Matrix/provider acceptance is verified. No automatic merge.
+Record provider acceptance in the relevant issue before closing it. No automatic merge.

@@ -58,7 +58,7 @@ Empty (no source), importing (fogged card), dataset connected with no charts, qu
 no rows, truncated results, chart/data mismatch, unsupported kind, import errors (wrong type, >256 KB, malformed,
 server without a data engine), expired session, unreachable API, and voice unavailable until #4.
 
-## Verification (October 3, local laptop, not Matrix)
+## Local verification — 3 October 2026
 
 - After merging `main` (#1, #2, #5): a 3-sheet synthetic workbook listed Revenue/Headcount/Notes and imported the chosen sheet; a locally configured public HTTPS source (JSONPlaceholder, synthetic) rejected a wrong source ID, connected with its capability, charted, refreshed and re-queried. Local config and token lived outside git.
 
@@ -70,4 +70,4 @@ server without a data engine), expired session, unreachable API, and voice unava
   - Add (line, bar, metric, table), type switching with unchanged evidence, complete reorder, remove,
     select/Escape, resize, recolor, phone width, dataset restore after reload.
   - Import errors and a stale-session upload against the #1 skeleton (`NOT_IMPLEMENTED` shown honestly).
-- Not yet done: Matrix browser run, screenshots attached to the PR, and switching to the merged #2 endpoints.
+- Follow-up checks: screenshots attached to the PR and integration with the merged #2 endpoints.

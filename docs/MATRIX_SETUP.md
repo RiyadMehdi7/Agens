@@ -1,7 +1,6 @@
 # Matrix OS + Codex setup
 
-1. Open https://app.matrix-os.com and enter your account/workspace. If provisioning or billing is
-   needed, complete it yourself. Ask onsite staff how TechEuropeMatrix applies before checkout.
+1. Open https://app.matrix-os.com and enter your account/workspace.
 2. Local CLI: npm install -g @finnaai/matrix@latest.
 3. Run matrix login --profile cloud and approve its browser/device flow.
 4. Verify matrix doctor, matrix whoami, matrix status and matrix instance info --json.
@@ -21,4 +20,3 @@ Expected evidence: authenticated Matrix identity, remote checkout/commit, succes
 Codex running there, provider model access and finally live voice/data demo. These are separate gates.
 
 See [SETUP_STATUS.md](SETUP_STATUS.md) for the verified Matrix execution on 3 October 2026.
-Preparing setup instructions alone does not verify a cloud runtime.

@@ -48,7 +48,7 @@ mic (16 kHz PCM) ──► Gemini 3.8 Live ──tool call──► browser tool
 `availability.voice` and `availability.planner` are `configured` when the server holds a key. That means
 configured, not verified: only a real session proves access. `npm run verify:gemini` checks model metadata.
 
-## Verification (3 October 2026, laptop — not Matrix)
+## Local verification — 3 October 2026
 
 - `npm run check`, `npm test` (51 passing, 3 opt-in skipped), `npm run build` pass.
 - Server tests with an injected fake provider: health states, token pass-through, quota → 429, outage → 503

@@ -114,5 +114,5 @@ remain compatible. Local smoke checks do not establish live voice or a completed
   Use only a dedicated disposable fixture database containing analytics.revenue(id,region,amount)
   and role agens_reader: admin-enabled tests temporarily change that fixture's grants and create/drop
   uniquely named fixture views. They must never point at a production database.
-- Tariel's Matrix machine, a real user workbook and owner's actual external services remain for
-  the team's next check. The isolated database and development server were stopped after validation.
+- The isolated database and development server were stopped after validation.
+  Owner-specific workbooks and external services require separate connection checks.
