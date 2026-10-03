@@ -20,6 +20,9 @@ export interface TileLayout { size: number; color: number }
 export interface PendingTile { key: string; title: string; kind: Chart['kind']; size: number; color: number }
 export interface Status { text: string; tone: 'info' | 'error'; action?: { label: string; run: () => void } }
 export type ServerData = 'checking' | 'available' | 'unavailable' | 'unreachable';
+/** A workbook waiting for the user to pick one of several sheets. */
+export interface SheetChoice { name: string; contentBase64: string; sheets: string[] }
+export type SourceState = 'refreshing' | 'failed';
 
 /** Dashboard actions without expectedRevision; dispatch supplies the current one. */
 export type DashboardAction = { type: 'add'; chart: Chart } | { type: 'update'; chartId: string; patch: Partial<Pick<Chart, 'title' | 'kind' | 'fields'>> }
@@ -47,9 +50,14 @@ export function useCanvas() {
   const [pending, setPending] = useState<PendingTile[]>([]);
   const [importing, setImporting] = useState<string | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
+  const [sheetChoice, setSheetChoice] = useState<SheetChoice | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [sourceState, setSourceState] = useState<Record<string, SourceState>>({});
   const dashboardRef = useRef(dashboard);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  const resultsRef = useRef(results);
+  resultsRef.current = results;
   const apiRef = useRef<AgensApi>(api);
   apiRef.current = api;
   const generation = useRef(0);
@@ -61,7 +69,7 @@ export function useCanvas() {
     fetch('/api/health', { credentials: 'same-origin' })
       .then(r => r.json())
       .then(async (body: { availability?: { data?: string } }) => {
-        const available = body.availability?.data === 'adapter-injected';
+        const available = ['adapter-injected', 'ready'].includes(body.availability?.data ?? '');
         if (live) setServerData(available ? 'available' : 'unavailable');
         if (!available) return;
         // Datasets live in the server session, so a reload can reconnect them (charts are client-side).
@@ -100,25 +108,72 @@ export function useCanvas() {
     setStatus({ text: 'Your previous session expired, so earlier data was cleared.', tone: 'info' });
   }), [resetCanvas]);
 
-  const importFile = useCallback(async (file: File, sheet?: string) => {
-    const format = /\.csv$/i.test(file.name) ? 'csv' : /\.xlsx$/i.test(file.name) ? 'xlsx' : null;
-    if (!format) { fail(new ApiFailure('INVALID_REQUEST', 'Choose an .xlsx or .csv file.')); return; }
-    if (file.size > 256 * 1024) { fail(new ApiFailure('PAYLOAD_TOO_LARGE')); return; }
-    if (api.mode === 'sample') { resetCanvas(); setApi(http); setDatasets([]); setActiveId(null); }
-    setImporting(file.name);
-    setStatus({ text: `Reading ${file.name}…`, tone: 'info' });
+  const leaveSample = useCallback(() => {
+    if (apiRef.current.mode === 'sample') { resetCanvas(); setApi(http); setDatasets([]); setActiveId(null); }
+  }, [resetCanvas]);
+
+  const register = useCallback((dataset: Dataset, verb: string) => {
+    setDatasets(list => [...list.filter(d => d.id !== dataset.id), dataset]);
+    setActiveId(dataset.id);
+    setStatus({ text: `${dataset.name} ${verb} · ${dataset.rowCount.toLocaleString('en-US')} rows`, tone: 'info' });
+  }, []);
+
+  const runImport = useCallback(async (name: string, format: 'csv' | 'xlsx', contentBase64: string, sheet?: string) => {
+    setImporting(name);
+    setStatus({ text: `Reading ${name}…`, tone: 'info' });
     try {
-      const dataset = await http.importDataset({ format, name: file.name.slice(0, 200), contentBase64: await toBase64(file),
-        ...(format === 'xlsx' && sheet?.trim() ? { sheet: sheet.trim().slice(0, 100) } : {}) });
-      setDatasets(list => [...list.filter(d => d.id !== dataset.id), dataset]);
-      setActiveId(dataset.id);
-      setStatus({ text: `${dataset.name} connected · ${dataset.rowCount.toLocaleString('en-US')} rows`, tone: 'info' });
+      // A multi-sheet workbook asks which sheet to use; the server lists them without registering anything.
+      if (format === 'xlsx' && !sheet) {
+        const sheets = await http.inspect({ format, name, contentBase64 });
+        if (sheets.length > 1) {
+          setSheetChoice({ name, contentBase64, sheets });
+          setStatus({ text: `Choose a sheet from ${name}`, tone: 'info' });
+          return;
+        }
+      }
+      const dataset = await http.importDataset({ format, name, contentBase64, ...(sheet ? { sheet } : {}) });
+      setSheetChoice(null);
+      register(dataset, 'connected');
     } catch (error) {
       fail(error);
     } finally {
       setImporting(null);
     }
-  }, [api.mode, fail, resetCanvas]);
+  }, [fail, register]);
+
+  const importFile = useCallback(async (file: File) => {
+    const format = /\.csv$/i.test(file.name) ? 'csv' : /\.xlsx$/i.test(file.name) ? 'xlsx' : null;
+    if (!format) { fail(new ApiFailure('INVALID_REQUEST', 'Choose an .xlsx or .csv file.')); return; }
+    if (file.size > 256 * 1024) { fail(new ApiFailure('PAYLOAD_TOO_LARGE')); return; }
+    leaveSample();
+    setSheetChoice(null);
+    await runImport(file.name.slice(0, 200), format, await toBase64(file));
+  }, [fail, leaveSample, runImport]);
+
+  const chooseSheet = useCallback(async (sheet: string | null) => {
+    const choice = sheetChoice;
+    if (!choice) return;
+    if (sheet === null) { setSheetChoice(null); setStatus(null); return; }
+    await runImport(choice.name, 'xlsx', choice.contentBase64, sheet);
+  }, [runImport, sheetChoice]);
+
+  /** Attach an operator-configured Postgres or HTTPS source. The token is sent once and never stored. */
+  const connectSource = useCallback(async (sourceId: string, accessToken: string): Promise<boolean> => {
+    leaveSample();
+    setConnecting(true);
+    setStatus({ text: 'Connecting…', tone: 'info' });
+    try {
+      register(await http.connect({ sourceId: sourceId.trim(), accessToken: accessToken.trim() }), 'connected');
+      return true;
+    } catch (error) {
+      if (error instanceof ApiFailure && ['NOT_FOUND', 'FORBIDDEN', 'INVALID_REQUEST', 'CONFLICT'].includes(error.code)) {
+        setStatus({ text: 'That source ID or access token was not accepted.', tone: 'error' });
+      } else fail(error);
+      return false;
+    } finally {
+      setConnecting(false);
+    }
+  }, [fail, leaveSample, register]);
 
   const loadSample = useCallback(async () => {
     resetCanvas();
@@ -153,6 +208,46 @@ export function useCanvas() {
       setPending(list => list.filter(p => p.key !== key));
     }
   }, [activeId, api, datasets, dispatch, fail]);
+
+  /** Point a chart at newer evidence, keeping its place and the current selection. */
+  const replaceEvidence = useCallback((chartId: string, queryId: string) => {
+    const { charts, selectedChartId } = dashboardRef.current;
+    const index = charts.findIndex(c => c.id === chartId);
+    const chart = charts[index];
+    if (!chart || chart.queryId === queryId) return;
+    const order = charts.map(c => c.id);
+    if (!dispatch({ type: 'remove', chartId }) || !dispatch({ type: 'add', chart: { ...chart, queryId } })) return;
+    dispatch({ type: 'reorder', chartIds: order });
+    if (dashboardRef.current.selectedChartId !== selectedChartId) dispatch({ type: 'select', chartId: selectedChartId });
+  }, [dispatch]);
+
+  /**
+   * Refresh a live source, then re-run each of its charts with the exact request recorded in its evidence.
+   * A chart whose request no longer fits the refreshed schema keeps its earlier evidence.
+   */
+  const refreshDataset = useCallback(async (datasetId: string) => {
+    setSourceState(s => ({ ...s, [datasetId]: 'refreshing' }));
+    try {
+      const dataset = await http.refresh(datasetId);
+      setDatasets(list => list.map(d => (d.id === datasetId ? dataset : d)));
+      let kept = 0;
+      for (const chart of dashboardRef.current.charts.filter(c => c.datasetId === datasetId)) {
+        const request = resultsRef.current[chart.queryId]?.normalizedRequest;
+        if (!request) { kept += 1; continue; }
+        try {
+          const result = await http.query({ ...request, datasetId });
+          setResults(r => ({ ...r, [result.queryId]: result }));
+          replaceEvidence(chart.id, result.queryId);
+        } catch { kept += 1; }
+      }
+      setSourceState(({ [datasetId]: _, ...rest }) => rest);
+      setStatus({ text: kept ? `${dataset.name} refreshed · ${kept} chart${kept > 1 ? 's' : ''} kept earlier data` : `${dataset.name} refreshed`, tone: kept ? 'error' : 'info' });
+    } catch (error) {
+      setSourceState(s => ({ ...s, [datasetId]: 'failed' }));
+      if (error instanceof ApiFailure && error.code === 'INVALID_REQUEST') setStatus({ text: 'Uploads are snapshots. Upload the file again to update it.', tone: 'info' });
+      else fail(error);
+    }
+  }, [fail, replaceEvidence]);
 
   const controls = useMemo(() => ({
     select: (chartId: string | null) => dispatch({ type: 'select', chartId }),
@@ -199,6 +294,7 @@ export function useCanvas() {
     api, serverData, datasets, activeDataset: datasets.find(d => d.id === activeId) ?? null, setActiveId,
     dashboard, results, layout, pending, importing, status, setStatus,
     importFile, loadSample, addChart, dispatch, ...controls,
+    sheetChoice, chooseSheet, connecting, connectSource, sourceState, refreshDataset,
   };
 }
 

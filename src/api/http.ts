@@ -1,6 +1,6 @@
-import type { z } from 'zod';
-import { datasetListResponseSchema, errorResponseSchema, importResponseSchema, queryResponseSchema,
-  type ImportRequest } from '../../shared/api.js';
+import { z } from 'zod';
+import { datasetListResponseSchema, errorResponseSchema, importInspectionResponseSchema, importResponseSchema, queryResponseSchema,
+  type ConnectSourceRequest, type ImportRequest } from '../../shared/api.js';
 import type { Dataset, QueryResult } from '../../shared/data.js';
 import { ApiFailure } from './errors.js';
 import type { AgensApi, QueryInput } from './types.js';
@@ -53,4 +53,24 @@ export class HttpApi implements AgensApi {
   async query(request: QueryInput): Promise<QueryResult> {
     return (await call('/api/query', queryResponseSchema, request)).result;
   }
+  /** Sheet names of a workbook without registering it. CSV has none. */
+  async inspect(request: ImportRequest): Promise<string[]> {
+    return (await call('/api/datasets/inspect', importInspectionResponseSchema, request)).sheets;
+  }
+  /** Attach an operator-configured Postgres or HTTPS source with its access capability. */
+  async connect(request: ConnectSourceRequest): Promise<Dataset> {
+    return (await call('/api/sources/connect', importResponseSchema, request)).dataset;
+  }
+  async refresh(datasetId: string): Promise<Dataset> {
+    return (await call(`/api/datasets/${encodeURIComponent(datasetId)}/refresh`, importResponseSchema, {})).dataset;
+  }
+  async status(datasetId: string): Promise<SourceStatus> {
+    return call(`/api/datasets/${encodeURIComponent(datasetId)}/status`, sourceStatusSchema);
+  }
 }
+
+// Mirrors docs/DATA_RUNTIME.md; the server does not export a schema for this response.
+const sourceStatusSchema = z.object({
+  datasetId: z.string(), state: z.enum(['verified', 'snapshot', 'failed']), lastVerifiedAt: z.string(), lastError: z.string().optional(),
+}).strict();
+export type SourceStatus = z.infer<typeof sourceStatusSchema>;

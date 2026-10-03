@@ -49,3 +49,9 @@ export const KindIcon = ({ kind }: { kind: string }) => {
   };
   return <svg width="20" height="20" viewBox="0 0 24 24" {...stroke} aria-hidden="true">{paths[kind]}</svg>;
 };
+export const RefreshIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" {...stroke} strokeWidth={1.8} aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></svg>
+);
+export const ArrowRightIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} strokeWidth={1.8} aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+);

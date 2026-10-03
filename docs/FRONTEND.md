@@ -47,7 +47,9 @@ sources (left), microphone (centre), add chart (right). Nothing else is on scree
 - Reorder sends the complete chart ID list. Remove clears selection through the reducer.
   Selection is the reducer's `selectedChartId`, which is how “this chart” will resolve for voice.
 - Tiles carry no footer. The full evidence record (aggregation, freshness, capture time, truncation) is the chart title's tooltip; synthetic data and truncated results are always marked inline with `sample` / `partial`.
-- Workbook sheet discovery is not in the contract yet, so the sources popover has an optional sheet-name control (layers icon).
+- Workbooks are inspected first (`POST /api/datasets/inspect`); a multi-sheet workbook shows its sheets as chips and imports the one picked.
+- Postgres and API tiles open a two-field form (source ID and access token) that calls `POST /api/sources/connect`. The token is sent once and never stored by the canvas. Wrong IDs/tokens get one generic message.
+- Live sources show a refresh control. `POST /api/datasets/:id/refresh` is followed by re-running every chart on that dataset with the exact `normalizedRequest` recorded in its evidence; each chart is then pointed at the new evidence (remove/add/reorder through the shared reducer, keeping position and selection). A chart whose request no longer fits the refreshed schema keeps its earlier evidence and the status line says so. A failed refresh turns the source's dot red.
 - After a reload the canvas lists the session's datasets again. Charts are client state and are not restored.
 
 ## States covered
@@ -57,6 +59,8 @@ no rows, truncated results, chart/data mismatch, unsupported kind, import errors
 server without a data engine), expired session, unreachable API, and voice unavailable until #4.
 
 ## Verification (October 3, local laptop, not Matrix)
+
+- After merging `main` (#1, #2, #5): a 3-sheet synthetic workbook listed Revenue/Headcount/Notes and imported the chosen sheet; a locally configured public HTTPS source (JSONPlaceholder, synthetic) rejected a wrong source ID, connected with its capability, charted, refreshed and re-queried. Local config and token lived outside git.
 
 - `npm run check`, `npm test` and `npm run build` pass.
 - Browser, against a **local, uncommitted** integration of this branch with `codex/2-data-engine`'s
