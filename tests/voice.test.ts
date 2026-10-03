@@ -116,3 +116,28 @@ test('the Live config locks the 3.8 model, audio output and non-blocking tools w
   assert.ok(declared.every(d => d.behavior === 'NON_BLOCKING'));
   assert.ok(plannerOutputSchema.safeParse({ charts: [{ datasetId: 'a', kind: 'sankey', op: 'sum', extra: 1 }], summary: '' }).success === false);
 });
+
+test('a slow plan outlives the ordinary idle socket timeout', async t => {
+  const { createApiServer } = await import('../server/http/router.js');
+  const net = await import('node:net');
+  const holder = net.createServer();
+  await new Promise<void>(r => holder.listen(0, '127.0.0.1', r));
+  const port = (holder.address() as import('node:net').AddressInfo).port;
+  await new Promise<void>(r => holder.close(() => r()));
+  const origin = `http://127.0.0.1:${port}`;
+  const slow: VoiceProvider = { ...fake(() => ({ charts: [], summary: '' })).voice,
+    async plan() { await new Promise(r => setTimeout(r, 600)); return { charts: [], summary: 'late but fine' }; } };
+  const { server } = createApiServer({ origin, createAdapter: createWorkbookAdapter, voice: slow, idleTimeoutMs: 200 });
+  await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
+  t.after(() => new Promise<void>(r => server.close(() => r())));
+  let cookie = '';
+  const post = async (path: string, body: unknown) => {
+    const response = await fetch(origin + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, body: JSON.stringify(body) });
+    cookie = response.headers.get('set-cookie')?.split(';')[0] ?? cookie;
+    return response;
+  };
+  assert.equal((await post('/api/datasets/import', { format: 'csv', name: 'R', contentBase64: Buffer.from(csv).toString('base64') })).status, 201);
+  const plan = await post('/api/dashboard/plan', { prompt: 'x', dashboard: empty, evidence: [] });
+  assert.equal(plan.status, 200);
+  assert.equal((await plan.json() as { summary: string }).summary, 'late but fine');
+});

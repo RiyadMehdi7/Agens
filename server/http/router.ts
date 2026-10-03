@@ -8,6 +8,8 @@ export interface HttpOptions extends ServiceOptions {
   /** Exact browser-facing origin, including the dev port. Do not derive from Host. */
   origin: string;
   maxBodyBytes?: number;
+  /** Idle socket timeout for ordinary requests (default 10 s). Planning gets a longer window, below. */
+  idleTimeoutMs?: number;
 }
 const cookieName = 'agens_session';
 function readCookie(req: IncomingMessage): string | undefined {
@@ -57,6 +59,10 @@ export function createApiServer(options: HttpOptions) {
   const maxBodyBytes = options.maxBodyBytes ?? 512 * 1024;
   if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 1 || maxBodyBytes > 512 * 1024) throw new Error('Invalid body limit');
   const service = new ApiService(options);
+  const idleTimeoutMs = options.idleTimeoutMs ?? 10_000;
+  // Planning is silent while it waits: up to 30 s for the model plus up to six bounded queries.
+  // The whole request has already been read, so only this response's idle window is widened.
+  const planSocketMs = Math.max(idleTimeoutMs, 75_000);
   const server = createServer({ maxHeaderSize: 8192 }, (req, res) => {
     void (async () => {
       try {
@@ -92,14 +98,14 @@ export function createApiServer(options: HttpOptions) {
           case '/api/sources/connect': result=await service.connect(session.id,body);status=201;break;
           case '/api/query': result = await service.query(session.id, body); break;
           case '/api/live/token': liveTokenRequestSchema.parse(body); result = await service.live(session.id); break;
-          case '/api/dashboard/plan': result = await service.plan(session.id, body); break;
+          case '/api/dashboard/plan': req.socket.setTimeout(planSocketMs); result = await service.plan(session.id, body); break;
           case '/api/tools/execute': {
             const tool = toolRequestSchema.parse(body);
             switch (tool.name) {
               case 'list_datasets': result = service.list(session.id); break;
               case 'query_data': result = await service.query(session.id, tool.arguments); break;
               case 'get_query': result = service.evidence(session.id, tool.arguments.queryId, tool.arguments.datasetId); break;
-              case 'plan_dashboard': result = await service.plan(session.id, tool.arguments); break;
+              case 'plan_dashboard': req.socket.setTimeout(planSocketMs); result = await service.plan(session.id, tool.arguments); break;
             }
             break;
           }
@@ -118,7 +124,7 @@ export function createApiServer(options: HttpOptions) {
   });
   server.requestTimeout = 10_000;
   server.headersTimeout = 10_000;
-  server.timeout = 10_000;
+  server.timeout = idleTimeoutMs;
   server.keepAliveTimeout = 1000;
   server.maxConnections = 64;
   const cleanup = setInterval(() => service.prune(), Math.min(service.limits.sessionTtlMs, 30_000));
