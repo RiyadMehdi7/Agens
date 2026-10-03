@@ -108,7 +108,7 @@ export function App() {
               </button>
             ) : (
               <button className="mic" aria-disabled="true" aria-label="Voice is not available on this server"
-                onClick={() => canvas.setStatus({ text: 'Voice is not configured on this server. Use + to add charts.', tone: 'info' })}>
+                onClick={() => canvas.setStatus({ text: onboarding ? 'Voice is not configured on this server. Connect data to build charts by hand.' : 'Voice is not configured on this server. Use + to add charts.', tone: 'info' })}>
                 <MicIcon />
               </button>
             )}
